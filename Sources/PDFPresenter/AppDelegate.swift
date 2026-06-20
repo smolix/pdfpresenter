@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         presenter.title = "Presenter"
+        presenter.isReleasedWhenClosed = false   // ARC owns it; closing must not deallocate
         presenter.contentView = NSHostingView(rootView: PresenterView(model: model, actions: actions))
         presenter.center()
         presenter.setFrameAutosaveName("PresenterWindow")
@@ -86,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered, defer: false)
         audience.title = "Audience"
+        audience.isReleasedWhenClosed = false    // ARC owns it; closing must not deallocate
         audience.backgroundColor = .black
         audience.contentView = NSHostingView(rootView: AudienceView(model: model))
         audienceWindow = audience
