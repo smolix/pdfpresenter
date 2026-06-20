@@ -4,3 +4,12 @@
 *.swp
 /test-*.pdf
 *.pdfpres.json
+
+# iOS (xcodeproj is generated from ios/project.yml via xcodegen)
+ios/*.xcodeproj
+DerivedData/
+*.xcuserstate
+*.xcuserdatad
+
+# Icon source bundle (the .icns + iOS AppIcon are extracted from it and tracked)
+icons.zip

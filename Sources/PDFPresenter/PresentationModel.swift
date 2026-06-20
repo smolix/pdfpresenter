@@ -5,34 +5,10 @@ import Foundation
 import PDFKit
 import Observation
 import CoreGraphics
+import PresenterKit
 
-enum BlankMode { case none, black, white }
-enum Tool: String { case off, laser, pen, highlighter, eraser, spotlight }
-enum SplitMode { case auto, splitRight, single }
-
-/// Presenter-view arrangements. Each lays out the same cards (current / next /
-/// notes / status) differently; cards always hug the slide's real aspect ratio.
-enum LayoutPreset: String, CaseIterable {
-    case notesRight, notesBottom, slideFocus
-    var title: String {
-        switch self {
-        case .notesRight:  return "Notes Right"
-        case .notesBottom: return "Notes Bottom"
-        case .slideFocus:  return "Slide Focus"
-        }
-    }
-}
-
-/// A freehand annotation stroke. Points are normalized (0...1) inside the slide
-/// region, y measured downward (SwiftUI convention) so it maps identically on
-/// the presenter panel and the audience screen regardless of their pixel sizes.
-struct Stroke: Identifiable, Codable {
-    var id = UUID()
-    var points: [CGPoint]
-    var width: CGFloat = 0.005       // fraction of slide width
-    var colorIndex: Int = 0          // index into the annotation palette
-    var highlighter: Bool = false
-}
+// BlankMode, Tool, SplitMode, LayoutPreset and Stroke live in PresenterKit so
+// the iOS companion shares them verbatim.
 
 @Observable
 final class PresentationModel {
@@ -52,6 +28,7 @@ final class PresentationModel {
     var splitMode: SplitMode = .auto
     var blank: BlankMode = .none
     var showOverview = false
+    var showHelp = false
 
     // MARK: Tools / annotations
     var tool: Tool = .off
@@ -100,6 +77,40 @@ final class PresentationModel {
 
     var currentPage: PDFPage? { document?.page(at: currentIndex) }
     var nextIndex: Int? { currentIndex + 1 < pageCount ? currentIndex + 1 : nil }
+
+    // MARK: Page labels (the document's own page numbers, e.g. printed on slides)
+
+    /// The document's label for a page (skips the title, restarts numbering,
+    /// repeats across overlay frames, …), falling back to the 1-based index when
+    /// the PDF carries no page labels.
+    func label(for index: Int) -> String {
+        guard index >= 0, index < pageCount, let l = document?.page(at: index)?.label,
+              !l.isEmpty else { return index >= 0 ? "\(index + 1)" : "" }
+        return l
+    }
+    var currentLabel: String { pageCount == 0 ? "0" : label(for: currentIndex) }
+    /// True when the PDF defines its own page numbering that differs from the
+    /// raw 1-based order (so jump-by-number should resolve against labels).
+    var hasCustomLabels: Bool {
+        guard let doc = document else { return false }
+        for i in 0..<pageCount where doc.page(at: i)?.label.map({ $0 != "\(i + 1)" }) == true {
+            return true
+        }
+        return false
+    }
+
+    /// Jump to the page whose document label matches `text`. Returns false when
+    /// no page carries that label (caller can beep). Used by type-a-number-then-
+    /// Return so the typed number is the document's page number, not the index.
+    @discardableResult
+    func goToLabel(_ text: String) -> Bool {
+        let target = text.trimmingCharacters(in: .whitespaces)
+        guard !target.isEmpty else { return false }
+        if let idx = (0..<pageCount).first(where: { label(for: $0) == target }) {
+            goTo(idx); return true
+        }
+        return false
+    }
 
     /// Aspect (w/h) of the slide half — used to size cards so they hug content.
     var slideAspect: CGFloat {

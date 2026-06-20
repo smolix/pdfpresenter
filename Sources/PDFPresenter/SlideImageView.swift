@@ -3,6 +3,7 @@
 
 import SwiftUI
 import PDFKit
+import PresenterKit
 
 /// Shows one cropped region of one page, letterboxed on black, with optional
 /// annotation overlay, magnifier, and (for the current slide) tool interaction.

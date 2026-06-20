@@ -1,0 +1,38 @@
+# XcodeGen spec for the iOS companion app.
+#   1) brew/port install xcodegen   (MacPorts: sudo port install xcodegen)
+#   2) cd ios && xcodegen generate
+#   3) open PresenterRemote.xcodeproj, pick your Personal Team + device, Run.
+name: PresenterRemote
+options:
+  bundleIdPrefix: org.smola.pdfpresenter
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  PresenterKit:
+    path: ..            # the repo-root Package.swift (PresenterKit library product)
+
+targets:
+  PresenterRemote:
+    type: application
+    platform: iOS
+    sources:
+      - path: PresenterRemote
+    dependencies:
+      - package: PresenterKit
+        product: PresenterKit
+    settings:
+      base:
+        PRODUCT_NAME: PresenterRemote
+        PRODUCT_BUNDLE_IDENTIFIER: org.smola.pdfpresenter.remote
+        INFOPLIST_FILE: PresenterRemote/Info.plist
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"   # iPhone + iPad
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_EMIT_LOC_STRINGS: YES

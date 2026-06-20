@@ -2,12 +2,13 @@
 // Copyright 2026 Alex Smola
 
 import SwiftUI
+import PresenterKit
 
 /// Window-level actions the presenter UI delegates back to the AppDelegate.
 struct PresenterActions {
     var openFile: () -> Void = {}
     var toggleFullscreen: () -> Void = {}
-    var presentOnSecond: () -> Void = {}
+    var cycleDisplay: () -> Void = {}
     var exportAnnotated: () -> Void = {}
 }
 
@@ -39,6 +40,7 @@ struct PresenterView: View {
         }
         .background(Color.black)
         .overlay { if model.showOverview { OverviewGrid(model: model) } }
+        .overlay { if model.showHelp { HelpOverlay(model: model) } }
     }
 
     @ViewBuilder private var nextCard: some View {
@@ -275,7 +277,7 @@ struct StatusBar: View {
 
                 Spacer()
 
-                Text("Slide \(model.pageCount == 0 ? 0 : model.currentIndex + 1) of \(model.pageCount)")
+                Text("Slide \(model.currentLabel) of \(model.pageCount)")
                     .monospacedDigit().foregroundStyle(.secondary)
                 ProgressCapsule(
                     fraction: model.pageCount > 0
@@ -344,8 +346,9 @@ struct TopBar: View {
             Divider().frame(height: 18)
 
             Button { model.goPrev() } label: { Image(systemName: "chevron.left") }
-            Text("\(model.pageCount == 0 ? 0 : model.currentIndex + 1) / \(model.pageCount)")
+            Text("\(model.currentLabel) / \(model.pageCount)")
                 .monospacedDigit().frame(minWidth: 58)
+                .help("Document page \(model.currentLabel) — physical slide \(model.pageCount == 0 ? 0 : model.currentIndex + 1) of \(model.pageCount)")
             Button { model.goNext() } label: { Image(systemName: "chevron.right") }
 
             Divider().frame(height: 18)
@@ -390,8 +393,12 @@ struct TopBar: View {
 
             Button { model.toggleBlack() } label: { Image(systemName: "rectangle.fill") }
                 .foregroundStyle(model.blank == .black ? Color.accentColor : .primary).help("Blank black (B)")
+            Button { model.toggleWhite() } label: { Image(systemName: "rectangle") }
+                .foregroundStyle(model.blank == .white ? Color.accentColor : .primary).help("Blank white (W)")
             Button { model.showOverview.toggle() } label: { Image(systemName: "square.grid.3x3") }
                 .help("Overview (Tab)")
+            Button { model.showHelp.toggle() } label: { Image(systemName: "questionmark.circle") }
+                .help("Keyboard shortcuts (?)")
 
             Menu {
                 Picker("Layout", selection: $model.preset) {
@@ -411,8 +418,10 @@ struct TopBar: View {
                 Divider()
                 Button("Export Annotated PDF…") { actions.exportAnnotated() }
                 Divider()
-                Button("Present Full-Screen on External (⌘↩)") { actions.presentOnSecond() }
                 Button("Toggle Audience Full-Screen (F)") { actions.toggleFullscreen() }
+                Button("Move Audience to Next Display (⌃M)") { actions.cycleDisplay() }
+                Divider()
+                Button("Keyboard Shortcuts (?)") { model.showHelp = true }
             } label: { Image(systemName: "slider.horizontal.3") }
             .menuStyle(.borderlessButton).frame(width: 38)
         }
@@ -452,7 +461,7 @@ struct OverviewGrid: View {
                                             .stroke(i == model.currentIndex ? Color.accentColor : Color.white.opacity(0.2),
                                                     lineWidth: i == model.currentIndex ? 3 : 1)
                                     )
-                                Text("\(i + 1)").font(.caption)
+                                Text(model.label(for: i)).font(.caption)
                                     .foregroundStyle(i == model.currentIndex ? Color.accentColor : .white)
                             }
                             .contentShape(Rectangle())

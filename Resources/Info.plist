@@ -22,6 +22,15 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>PDF Presenter connects to the PDF Presenter Remote app on your iPhone or iPad to control the presentation.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_pdfpres-ctl._tcp</string>
+        <string>_pdfpres-ctl._udp</string>
+    </array>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
