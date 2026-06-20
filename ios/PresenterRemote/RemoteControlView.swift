@@ -40,7 +40,7 @@ struct RemoteControlView: View {
                 .presentationDetents([.medium])
         }
         .sheet(isPresented: $showJump) {
-            GoToSlideSheet(conn: conn) { showJump = false }
+            GoToSlideSheet(onGo: { conn.send(.goToLabel($0)) }) { showJump = false }
         }
         .onAppear {
             #if DEBUG
@@ -294,7 +294,7 @@ private struct ControlStrip: View {
     }
 }
 
-private struct StripButton: View {
+struct StripButton: View {
     let icon: String
     var active = false
     let action: () -> Void
@@ -314,7 +314,7 @@ private struct StripButton: View {
 }
 
 /// A pen/highlighter colour swatch sized like a strip button so it flows in line.
-private struct SwatchButton: View {
+struct SwatchButton: View {
     let index: Int
     let selected: Bool
     let action: () -> Void
@@ -335,7 +335,7 @@ private struct SwatchButton: View {
 /// A simple left-to-right flow layout: lays children in a row until they don't
 /// fit, then wraps to the next row. Keeps the control strip fully visible at any
 /// width instead of scrolling buttons off-screen.
-private struct FlowLayout: Layout {
+struct FlowLayout: Layout {
     var spacing: CGFloat = 8
     var lineSpacing: CGFloat = 8
 
@@ -470,15 +470,15 @@ private struct OverviewSheet: View {
 /// Go-to-slide with a self-contained dark number pad — no system keyboard, so
 /// no white floating bubble on iPad. A hardware keyboard (digits / Return /
 /// Delete) works too.
-private struct GoToSlideSheet: View {
-    @Bindable var conn: ConnectionModel
+struct GoToSlideSheet: View {
+    let onGo: (String) -> Void
     let dismiss: () -> Void
     @State private var digits = ""
     @FocusState private var keyFocus: Bool
 
     private func tap(_ n: Int) { if digits.count < 6 { digits += String(n) } }
     private func backspace() { if !digits.isEmpty { digits.removeLast() } }
-    private func go() { if !digits.isEmpty { conn.send(.goToLabel(digits)) }; dismiss() }
+    private func go() { if !digits.isEmpty { onGo(digits) }; dismiss() }
 
     var body: some View {
         let cols = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
