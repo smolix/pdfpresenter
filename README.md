@@ -4,13 +4,13 @@ A native macOS PDF slide presenter with a true **presenter view / second-screen*
 mode — like Keynote or PowerPoint, but for plain PDF decks. Built on PDFKit +
 SwiftUI/AppKit.
 
-When an external display is connected, the **slides go full-screen on the
-projector** automatically while your laptop shows the **presenter view**: the
-current slide, the next slide, speaker notes, a timer and clock, with a slide
-overview, annotation tools, a spotlight and magnifier, a talk-length countdown,
-and screen-blanking.
+**[Website &amp; download → smolix.github.io/pdfpresenter](https://smolix.github.io/pdfpresenter)**
 
-<!-- A screenshot of the presenter view goes well here. -->
+Your laptop shows the **presenter view** — the current slide, the next slide,
+speaker notes, a timer and clock, with a slide overview, annotation tools, a
+spotlight and magnifier, a talk-length countdown, and screen-blanking — while the
+**slide goes full-screen on the projector** when you choose to present. An
+**iPhone / iPad companion** acts as a wireless remote with Apple-Pencil drawing.
 
 ## Why
 
