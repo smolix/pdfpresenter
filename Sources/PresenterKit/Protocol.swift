@@ -95,10 +95,12 @@ public enum PresenterMessage: Codable, Sendable {
     case strokeEnd
     case erase(CGPoint)
     case requestThumbnails                     // (re)send current + next images & strokes
+    case requestAllThumbnails                  // stream every slide (for the overview grid)
 
     // Mac → iOS
     case paired(ok: Bool, reason: String?)
     case state(PresenterState)
     case thumbnail(index: Int, kind: SlideKind, jpeg: Data, aspect: Double, token: Int)
+    case overviewThumbnail(index: Int, jpeg: Data, token: Int)   // small, for the grid
     case strokes(index: Int, strokes: [Stroke])
 }

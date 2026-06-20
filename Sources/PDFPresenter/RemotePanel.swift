@@ -25,7 +25,7 @@ struct RemotePanel: View {
                 Image(systemName: "iphone.gen3.radiowaves.left.and.right")
                     .font(.title2).foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("PDF Presenter Remote").font(.headline)
+                    Text("PDF Presenter on iPhone / iPad").font(.headline)
                     Text(status.advertising ? "Discoverable on Wi-Fi & Bluetooth" : "Off")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -41,7 +41,7 @@ struct RemotePanel: View {
                     .padding(.vertical, 12)
                     .background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 12))
                     .foregroundStyle(.white)
-                Text("On your iPhone or iPad, open **PDF Presenter Remote**, tap this Mac, "
+                Text("On your iPhone or iPad, open the **PDF Presenter** app, tap this Mac, "
                      + "and enter this code. Paired devices reconnect automatically.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }

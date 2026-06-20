@@ -5,7 +5,7 @@
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundleDisplayName</key>
-    <string>PDF Presenter Remote</string>
+    <string>PDF Presenter</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleExecutable</key>
@@ -21,7 +21,7 @@
     <key>UILaunchScreen</key>
     <dict>
         <key>UIColorName</key>
-        <string></string>
+        <string>LaunchBackground</string>
     </dict>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
@@ -39,7 +39,7 @@
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>PDF Presenter Remote connects to PDF Presenter on your Mac to control your slides over Wi-Fi or Bluetooth.</string>
+    <string>Connects to PDF Presenter on your Mac to control your slides over Wi-Fi or Bluetooth.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_pdfpres-ctl._tcp</string>

@@ -2,68 +2,164 @@
 // Copyright 2026 Alex Smola
 
 import SwiftUI
+import UIKit
 import PresenterKit
 
-/// The connected companion. On iPad it's a big drawing stage with a control
-/// column; on iPhone it's a stacked controller. Mirrors the desktop presenter:
-/// current/next slides, notes, timer, counter, and every control.
+/// Keynote-style remote: a dominant current slide with a compact, persistent
+/// control strip on top, a prominent next-slide preview and notes alongside
+/// (landscape) or below (portrait). Swipe the slide to navigate. The iPhone gets
+/// a tighter, phone-shaped variant of the same idea.
 struct RemoteControlView: View {
     @Bindable var conn: ConnectionModel
-    @Environment(\.horizontalSizeClass) private var hSize
+    @State private var showOverview = false
+    @State private var showConnection = false
+    @State private var showJump = false
+    @State private var jumpText = ""
+
+    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(conn: conn)
+            TopBar(conn: conn, showConnection: $showConnection)
+            ControlStrip(conn: conn, showOverview: $showOverview, showJump: $showJump)
             Divider()
-            if hSize == .regular {
-                HStack(spacing: 0) {
-                    SlideStageView(conn: conn, interactive: true)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.black)
-                    Divider()
-                    ScrollView { ControlsView(conn: conn).padding(16) }
-                        .frame(width: 360)
-                        .background(Color(white: 0.08))
-                }
-            } else {
-                ScrollView {
-                    VStack(spacing: 16) {
-                        SlideStageView(conn: conn, interactive: true)
-                            .aspectRatio(CGFloat(conn.state?.slideAspect ?? 16.0 / 9.0), contentMode: .fit)
-                            .frame(maxHeight: 280)
-                            .background(Color.black, in: RoundedRectangle(cornerRadius: 10))
-                        ControlsView(conn: conn)
-                    }
-                    .padding(16)
+            GeometryReader { geo in
+                let landscape = geo.size.width >= geo.size.height
+                if isPhone {
+                    phoneContent(geo: geo, landscape: landscape)
+                } else {
+                    padContent(geo: geo, landscape: landscape)
                 }
             }
+        }
+        .background(Color.black.ignoresSafeArea())
+        .sheet(isPresented: $showOverview) {
+            OverviewSheet(conn: conn) { showOverview = false }
+        }
+        .sheet(isPresented: $showConnection) {
+            ConnectionSheet(conn: conn) { showConnection = false }
+                .presentationDetents([.medium])
+        }
+        .alert("Go to Slide", isPresented: $showJump) {
+            TextField("Slide number", text: $jumpText)
+                .keyboardType(.numberPad)
+            Button("Go") {
+                let n = jumpText.filter(\.isNumber)
+                if !n.isEmpty { conn.send(.goToLabel(n)) }
+                jumpText = ""
+            }
+            Button("Cancel", role: .cancel) { jumpText = "" }
+        } message: {
+            Text("Type the number shown on the slide.")
+        }
+        .onAppear {
+            #if DEBUG
+            if conn.demoShowJump { showJump = true }
+            if conn.demoShowConnection { showConnection = true }
+            #endif
+        }
+    }
+
+    // iPad: dominant slide + a next/notes column (landscape) or row (portrait).
+    @ViewBuilder private func padContent(geo: GeometryProxy, landscape: Bool) -> some View {
+        if landscape {
+            HStack(spacing: 12) {
+                SlideStageView(conn: conn, interactive: true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 12) {
+                    NextCard(conn: conn)
+                    NotesCard(conn: conn)
+                }
+                .frame(width: max(220, geo.size.width * 0.27))
+            }
+            .padding(12)
+        } else {
+            VStack(spacing: 12) {
+                SlideStageView(conn: conn, interactive: true)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: geo.size.height * 0.56)
+                HStack(spacing: 12) {
+                    NextCard(conn: conn).frame(maxWidth: .infinity)
+                    NotesCard(conn: conn).frame(maxWidth: .infinity)
+                }
+                .frame(maxHeight: .infinity)
+            }
+            .padding(12)
+        }
+    }
+
+    // iPhone: a big slide with a slim next/notes column (landscape) or a compact
+    // toggled Next/Notes panel below (portrait) — tight, like Keynote's remote.
+    @ViewBuilder private func phoneContent(geo: GeometryProxy, landscape: Bool) -> some View {
+        if landscape {
+            HStack(spacing: 10) {
+                SlideStageView(conn: conn, interactive: true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 8) {
+                    NextCard(conn: conn)
+                    NotesCard(conn: conn)
+                }
+                .frame(width: max(180, geo.size.width * 0.34))
+            }
+            .padding(10)
+        } else {
+            VStack(spacing: 10) {
+                SlideStageView(conn: conn, interactive: true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                PhonePanel(conn: conn)
+                    .frame(height: max(150, geo.size.height * 0.32))
+            }
+            .padding(10)
         }
     }
 }
 
-// MARK: - Header (counter + timer + clock)
+// MARK: - iPhone bottom panel (toggle Next / Notes to save vertical space)
 
-struct HeaderView: View {
+private struct PhonePanel: View {
     @Bindable var conn: ConnectionModel
-    @State private var showJump = false
+    @State private var tab = 0   // 0 = next, 1 = notes
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Picker("", selection: $tab) {
+                Text("Next").tag(0)
+                Text("Notes").tag(1)
+            }
+            .pickerStyle(.segmented)
+
+            if tab == 0 { NextCard(conn: conn) } else { NotesCard(conn: conn) }
+        }
+    }
+}
+
+// MARK: - Top bar (connection · counter · timer)
+
+private struct TopBar: View {
+    @Bindable var conn: ConnectionModel
+    @Binding var showConnection: Bool
 
     var body: some View {
         let s = conn.state
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(s?.documentName.isEmpty == false ? s!.documentName : "PDF Presenter")
-                    .font(.subheadline.weight(.medium)).lineLimit(1)
-                Text("Slide \(s?.currentLabel ?? "—") of \(s?.pageCount ?? 0)")
-                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+        HStack(spacing: 12) {
+            Button { showConnection = true } label: {
+                HStack(spacing: 6) {
+                    Circle().fill(.green).frame(width: 8, height: 8)
+                    Text(conn.macName ?? "Mac").font(.subheadline.weight(.medium)).lineLimit(1)
+                    Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(Color(white: 0.15), in: Capsule())
             }
+            .buttonStyle(.plain)
+
             Spacer()
+
+            Text("\(s?.currentLabel ?? "—") / \(s?.pageCount ?? 0)")
+                .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
             TimelineView(.periodic(from: .now, by: 0.5)) { ctx in timer(now: ctx.date) }
-            Menu {
-                Button("Re-sync") { conn.send(.first); conn.send(.goToIndex(conn.state?.currentIndex ?? 0)) }
-                Button("Forget this Mac", role: .destructive) { conn.forget() }
-            } label: { Image(systemName: "ellipsis.circle").font(.title3) }
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
+        .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 6)
     }
 
     @ViewBuilder private func timer(now: Date) -> some View {
@@ -73,13 +169,13 @@ struct HeaderView: View {
             HStack(spacing: 5) {
                 Image(systemName: over ? "exclamationmark.triangle.fill" : "timer")
                 Text((over ? "−" : "") + elapsedString(abs(rem)))
-                    .monospacedDigit().font(.title3.weight(.semibold))
+                    .monospacedDigit().font(.headline)
             }
             .foregroundStyle(timerColor(rem, talk: s?.talkLength ?? 0))
         } else {
             HStack(spacing: 5) {
                 Image(systemName: "timer")
-                Text(elapsedString(s?.elapsed(now: now) ?? 0)).monospacedDigit().font(.title3.weight(.semibold))
+                Text(elapsedString(s?.elapsed(now: now) ?? 0)).monospacedDigit().font(.headline)
             }
         }
     }
@@ -91,246 +187,339 @@ struct HeaderView: View {
     }
 }
 
-// MARK: - Controls
+// MARK: - Control strip (compact, persistent; wraps to extra rows when narrow)
 
-struct ControlsView: View {
+private struct ControlItem: Identifiable {
+    let id: String
+    let icon: String
+    let label: String
+    let active: Bool
+    let action: () -> Void
+}
+
+private struct ControlStrip: View {
     @Bindable var conn: ConnectionModel
-    @State private var showJump = false
-    @State private var jumpText = ""
+    @Binding var showOverview: Bool
+    @Binding var showJump: Bool
+    @State private var width: CGFloat = 0
 
     private var s: PresenterState? { conn.state }
+    private var tool: Tool { s?.tool ?? .off }
+    private var drawing: Bool { tool == .pen || tool == .highlighter }
 
     var body: some View {
-        VStack(spacing: 18) {
-            navSection
-            toolsSection
-            screenSection
-            timerSection
-            nextNotesSection
-        }
-        .sheet(isPresented: $showJump) { jumpSheet }
-    }
+        // Tools (and colour swatches while drawing) always show. The remaining
+        // controls fill what's left of ~2 rows by priority; the rest collapse
+        // into "⋯". So drawing keeps the strip tight (the controls barely matter
+        // then), and they reappear as the screen affords — full row on iPad.
+        let controls = controlItems
+        let budget = controlBudget()
+        let inline = Array(controls.prefix(budget))
+        let overflow = Array(controls.dropFirst(budget))
 
-    // Navigation
-    private var navSection: some View {
-        Section("Navigate") {
-            HStack(spacing: 10) {
-                BigButton(system: "chevron.left", label: "Prev") { conn.send(.prev) }
-                BigButton(system: "chevron.right", label: "Next", prominent: true) { conn.send(.next) }
+        FlowLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(tools, id: \.0) { (t, icon) in
+                StripButton(icon, active: tool == t) { conn.send(.setTool(t)) }
             }
-            HStack(spacing: 10) {
-                Tile("First", "backward.end") { conn.send(.first) }
-                Tile("Go To", "number") { jumpText = ""; showJump = true }
-                Tile("Last", "forward.end") { conn.send(.last) }
-                Tile("Overview", "square.grid.2x2", active: false) { conn.send(.cyclePreset) }
-            }
-        }
-    }
-
-    // Tools
-    private var toolsSection: some View {
-        Section("Tools") {
-            let cols = [GridItem(.adaptive(minimum: 72), spacing: 8)]
-            LazyVGrid(columns: cols, spacing: 8) {
-                ForEach(toolItems, id: \.0) { (tool, label, icon) in
-                    Tile(label, icon, active: s?.tool == tool) { conn.send(.setTool(tool)) }
+            if drawing {
+                ForEach(0..<annotationPalette.count, id: \.self) { i in
+                    SwatchButton(index: i, selected: s?.penColorIndex == i) { conn.send(.setPenColor(i)) }
                 }
             }
-            if s?.tool == .pen || s?.tool == .highlighter {
-                HStack(spacing: 8) {
-                    ForEach(0..<annotationPalette.count, id: \.self) { i in
-                        Circle().fill(remoteColor(i)).frame(width: 28, height: 28)
-                            .overlay(Circle().stroke(.white.opacity(s?.penColorIndex == i ? 0.95 : 0.25),
-                                                     lineWidth: s?.penColorIndex == i ? 3 : 1))
-                            .onTapGesture { conn.send(.setPenColor(i)) }
-                    }
-                    Spacer()
+            ForEach(inline) { c in StripButton(c.icon, active: c.active, action: c.action) }
+            moreMenu(overflow: overflow)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 6)
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { width = g.size.width }
+                .onChange(of: g.size.width) { _, w in width = w }
+        })
+    }
+
+    /// How many of the priority-ordered controls fit inline within two rows,
+    /// after tools, swatches, and the "⋯" menu — the rest overflow into "⋯".
+    private func controlBudget() -> Int {
+        let perRow = width > 0 ? max(1, Int((width - 28) / 50)) : 7   // 42 button + 8 spacing
+        let used = 6 /* tools */ + (drawing ? annotationPalette.count : 0) + 1 /* ⋯ */
+        return max(0, min(controlItems.count, perRow * 2 - used))
+    }
+
+    private var tools: [(Tool, String)] {
+        [(.off, "cursorarrow"), (.laser, "cursorarrow.rays"), (.spotlight, "flashlight.on.fill"),
+         (.pen, "pencil.tip"), (.highlighter, "highlighter"), (.eraser, "eraser")]
+    }
+
+    // Priority order: Clear first (the one control that matters mid-drawing),
+    // then navigation, blanking, presenting, timer.
+    private var controlItems: [ControlItem] {
+        [ ControlItem(id: "clear", icon: "trash", label: "Clear Annotations", active: false) {
+              conn.send(.clearAnnotations) },
+          ControlItem(id: "overview", icon: "rectangle.grid.2x2", label: "All Slides", active: false) {
+              conn.requestOverview(); showOverview = true },
+          ControlItem(id: "jump", icon: "number", label: "Go to Slide", active: false) {
+              showJump = true },
+          ControlItem(id: "black", icon: "rectangle", label: "Blank Black", active: s?.blank == .black) {
+              conn.send(.toggleBlack) },
+          ControlItem(id: "white", icon: "rectangle.fill", label: "Blank White", active: s?.blank == .white) {
+              conn.send(.toggleWhite) },
+          ControlItem(id: "full", icon: "rectangle.inset.filled.on.rectangle",
+                      label: s?.presenting == true ? "Windowed" : "Full-Screen", active: s?.presenting == true) {
+              conn.send(.toggleFullscreen) },
+          // Transport-style: the icon shows the action (▶ to start, ⏸ to pause);
+          // never highlighted, so a running timer doesn't read as a blue "pause".
+          ControlItem(id: "timer", icon: s?.timerRunning == true ? "pause.fill" : "play.fill",
+                      label: s?.timerRunning == true ? "Pause Timer" : "Start Timer", active: false) {
+              conn.send(.toggleTimer) },
+          ControlItem(id: "reset", icon: "arrow.counterclockwise", label: "Reset Timer", active: false) {
+              conn.send(.resetTimer) },
+          ControlItem(id: "magnify", icon: "plus.magnifyingglass", label: "Magnifier", active: s?.magnify == true) {
+              conn.send(.setMagnify(!(s?.magnify ?? false))) },
+        ]
+    }
+
+    private func moreMenu(overflow: [ControlItem]) -> some View {
+        Menu {
+            ForEach(overflow) { c in
+                Button(action: c.action) { Label(c.label, systemImage: c.icon) }
+            }
+            if !overflow.isEmpty { Divider() }
+            Picker("Layout", selection: Binding(get: { s?.preset ?? .notesRight },
+                                                set: { conn.send(.setPreset($0)) })) {
+                ForEach(LayoutPreset.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            if (s?.externalDisplays ?? 0) > 1 {
+                Button("Move Audience to Next Display") { conn.send(.cycleDisplay) }
+            }
+            Menu("Talk Length") {
+                Button("No target") { conn.send(.setTalkLength(0)) }
+                ForEach([5, 10, 15, 20, 25, 30, 40, 45, 60], id: \.self) { m in
+                    Button("\(m) min") { conn.send(.setTalkLength(Double(m * 60))) }
                 }
             }
-            HStack(spacing: 10) {
-                Tile("Magnify", "plus.magnifyingglass", active: s?.magnify == true) {
-                    conn.send(.setMagnify(!(s?.magnify ?? false)))
-                }
-                Tile("Clear", "trash") { conn.send(.clearAnnotations) }
-            }
+        } label: {
+            Image(systemName: "ellipsis").frame(width: 42, height: 42)
+                .background(Color(white: 0.15), in: RoundedRectangle(cornerRadius: 10))
         }
-    }
-
-    private var toolItems: [(Tool, String, String)] {
-        [(.off, "Cursor", "cursorarrow"),
-         (.laser, "Laser", "cursorarrow.rays"),
-         (.spotlight, "Spotlight", "flashlight.on.fill"),
-         (.pen, "Pen", "pencil.tip"),
-         (.highlighter, "Marker", "highlighter"),
-         (.eraser, "Eraser", "eraser")]
-    }
-
-    // Screen / display
-    private var screenSection: some View {
-        Section("Screen") {
-            HStack(spacing: 10) {
-                Tile("Black", "rectangle.fill", active: s?.blank == .black) { conn.send(.toggleBlack) }
-                Tile("White", "rectangle", active: s?.blank == .white) { conn.send(.toggleWhite) }
-                Tile(s?.presenting == true ? "Windowed" : "Full-Screen",
-                     "rectangle.inset.filled.on.rectangle", active: s?.presenting == true) {
-                    conn.send(.toggleFullscreen)
-                }
-            }
-            HStack(spacing: 10) {
-                Tile("Next Display", "display.2", disabled: (s?.externalDisplays ?? 0) < 2) { conn.send(.cycleDisplay) }
-                Menu {
-                    ForEach(LayoutPreset.allCases, id: \.self) { p in
-                        Button(p.title) { conn.send(.setPreset(p)) }
-                    }
-                } label: { TileLabel("Layout", "rectangle.3.group") }
-            }
-        }
-    }
-
-    // Timer
-    private var timerSection: some View {
-        Section("Timer") {
-            HStack(spacing: 10) {
-                Tile(s?.timerRunning == true ? "Pause" : "Start",
-                     s?.timerRunning == true ? "pause.fill" : "play.fill",
-                     active: s?.timerRunning == true) { conn.send(.toggleTimer) }
-                Tile("Reset", "arrow.counterclockwise") { conn.send(.resetTimer) }
-                Menu {
-                    Button("No target") { conn.send(.setTalkLength(0)) }
-                    ForEach([5, 10, 15, 20, 25, 30, 40, 45, 60], id: \.self) { m in
-                        Button("\(m) min") { conn.send(.setTalkLength(Double(m * 60))) }
-                    }
-                } label: { TileLabel("Length", "hourglass") }
-            }
-        }
-    }
-
-    // Next slide + notes
-    private var nextNotesSection: some View {
-        Section("Up Next & Notes") {
-            HStack(alignment: .top, spacing: 12) {
-                if let n = s?.currentIndex, s?.hasNext == true, let img = conn.slideImages[n + 1] {
-                    Image(uiImage: img).resizable().scaledToFit()
-                        .frame(width: 120)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white.opacity(0.15)))
-                } else {
-                    RoundedRectangle(cornerRadius: 6).fill(Color(white: 0.15))
-                        .frame(width: 120, height: 68)
-                        .overlay(Text("End").font(.caption).foregroundStyle(.secondary))
-                }
-                notesView
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    @ViewBuilder private var notesView: some View {
-        if conn.state?.isSplit == true, let img = conn.notesImage {
-            Image(uiImage: img).resizable().scaledToFit()
-                .frame(maxHeight: 120)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-        } else if let t = conn.state?.notesText, !t.isEmpty {
-            ScrollView { Text(t).font(.callout).frame(maxWidth: .infinity, alignment: .leading) }
-                .frame(maxHeight: 120)
-        } else {
-            Text("No notes").font(.callout).foregroundStyle(.secondary)
-        }
-    }
-
-    private var jumpSheet: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                Text("Type the slide number shown on the slide.")
-                    .font(.callout).foregroundStyle(.secondary)
-                TextField("Slide", text: $jumpText)
-                    .keyboardType(.numberPad).multilineTextAlignment(.center)
-                    .font(.system(size: 40, weight: .semibold, design: .rounded))
-                    .frame(width: 160)
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("Go to Slide")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showJump = false } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Go") { conn.send(.goToLabel(jumpText)); showJump = false }
-                        .disabled(jumpText.filter(\.isNumber).isEmpty)
-                }
-            }
-        }
-        .presentationDetents([.height(240)])
     }
 }
 
-// MARK: - Reusable controls
-
-/// A titled group with a small header.
-private struct Section<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-    init(_ title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
+private struct StripButton: View {
+    let icon: String
+    var active = false
+    let action: () -> Void
+    init(_ icon: String, active: Bool = false, action: @escaping () -> Void) {
+        self.icon = icon; self.active = active; self.action = action
+    }
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased()).font(.system(size: 11, weight: .bold)).tracking(0.6)
-                .foregroundStyle(.secondary)
-            content
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 17))
+                .frame(width: 42, height: 42)
+                .background(active ? Color.blue : Color(white: 0.15),
+                            in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(active ? Color.white : .primary)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// A pen/highlighter colour swatch sized like a strip button so it flows in line.
+private struct SwatchButton: View {
+    let index: Int
+    let selected: Bool
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.15))
+                .frame(width: 42, height: 42)
+                .overlay(
+                    Circle().fill(remoteColor(index)).frame(width: 24, height: 24)
+                        .overlay(Circle().stroke(.white.opacity(selected ? 0.95 : 0.25),
+                                                 lineWidth: selected ? 3 : 1))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// A simple left-to-right flow layout: lays children in a row until they don't
+/// fit, then wraps to the next row. Keeps the control strip fully visible at any
+/// width instead of scrolling buttons off-screen.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .greatestFiniteMagnitude
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        for v in subviews {
+            let sz = v.sizeThatFits(.unspecified)
+            if x > 0, x + sz.width > maxWidth {
+                widest = max(widest, x - spacing)
+                x = 0; y += rowHeight + lineSpacing; rowHeight = 0
+            }
+            x += sz.width + spacing
+            rowHeight = max(rowHeight, sz.height)
+        }
+        widest = max(widest, x - spacing)
+        let width = proposal.width ?? widest
+        return CGSize(width: width, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
+        for v in subviews {
+            let sz = v.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + sz.width > bounds.maxX {
+                x = bounds.minX; y += rowHeight + lineSpacing; rowHeight = 0
+            }
+            v.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(sz))
+            x += sz.width + spacing
+            rowHeight = max(rowHeight, sz.height)
+        }
+    }
+}
+
+// MARK: - Next slide + notes cards
+
+private struct NextCard: View {
+    @Bindable var conn: ConnectionModel
+    var body: some View {
+        let s = conn.state
+        let nextImg = (s?.hasNext == true) ? conn.slideImages[(s?.currentIndex ?? -1) + 1] : nil
+        VStack(alignment: .leading, spacing: 6) {
+            Text("NEXT").font(.system(size: 10, weight: .bold)).tracking(0.8).foregroundStyle(.secondary)
+            Button { conn.send(.next) } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(Color(white: 0.12))
+                    if let img = nextImg {
+                        Image(uiImage: img).resizable().scaledToFit().padding(2)
+                    } else if s?.hasNext == false {
+                        Text("End of deck").font(.callout).foregroundStyle(.secondary)
+                    } else {
+                        ProgressView().tint(.white)
+                    }
+                }
+                .aspectRatio(CGFloat(s?.slideAspect ?? 16.0 / 9.0), contentMode: .fit)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.12)))
+            }
+            .buttonStyle(.plain)
+            .disabled(s?.hasNext != true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-private struct Tile: View {
-    let label: String, system: String
-    var active = false, disabled = false
-    let action: () -> Void
-    init(_ label: String, _ system: String, active: Bool = false, disabled: Bool = false,
-         action: @escaping () -> Void) {
-        self.label = label; self.system = system; self.active = active
-        self.disabled = disabled; self.action = action
-    }
+private struct NotesCard: View {
+    @Bindable var conn: ConnectionModel
     var body: some View {
-        Button(action: action) { TileLabel(label, system, active: active) }
-            .buttonStyle(.plain).disabled(disabled).opacity(disabled ? 0.35 : 1)
-    }
-}
-
-private struct TileLabel: View {
-    let label: String, system: String
-    var active = false
-    init(_ label: String, _ system: String, active: Bool = false) {
-        self.label = label; self.system = system; self.active = active
-    }
-    var body: some View {
-        VStack(spacing: 4) {
-            Image(systemName: system).font(.title3)
-            Text(label).font(.caption2).lineLimit(1)
-        }
-        .frame(maxWidth: .infinity).frame(height: 56)
-        .background(active ? Color.blue.opacity(0.22) : Color(white: 0.15),
-                    in: RoundedRectangle(cornerRadius: 10))
-        .foregroundStyle(active ? Color.blue : .primary)
-        .overlay(RoundedRectangle(cornerRadius: 10)
-            .stroke(active ? Color.blue : Color.clear, lineWidth: 1.5))
-    }
-}
-
-private struct BigButton: View {
-    let system: String, label: String
-    var prominent = false
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: system).font(.title2.weight(.semibold))
-                Text(label).font(.headline)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("NOTES").font(.system(size: 10, weight: .bold)).tracking(0.8).foregroundStyle(.secondary)
+            Group {
+                if conn.state?.isSplit == true, let img = conn.notesImage {
+                    ScrollView { Image(uiImage: img).resizable().scaledToFit() }
+                } else if let t = conn.state?.notesText, !t.isEmpty {
+                    ScrollView { Text(t).font(.callout).frame(maxWidth: .infinity, alignment: .leading) }
+                } else {
+                    Text("No notes for this slide").font(.callout).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
             }
-            .frame(maxWidth: .infinity).frame(height: 64)
-            .background(prominent ? Color.blue : Color(white: 0.17),
-                        in: RoundedRectangle(cornerRadius: 12))
-            .foregroundStyle(prominent ? Color.white : .primary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(10)
+            .background(Color(white: 0.10), in: RoundedRectangle(cornerRadius: 8))
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+// MARK: - Sheets
+
+private struct OverviewSheet: View {
+    @Bindable var conn: ConnectionModel
+    let dismiss: () -> Void
+    private let cols = [GridItem(.adaptive(minimum: 150), spacing: 12)]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: cols, spacing: 12) {
+                    ForEach(0..<(conn.state?.pageCount ?? 0), id: \.self) { i in
+                        Button {
+                            conn.send(.goToIndex(i)); dismiss()
+                        } label: {
+                            VStack(spacing: 4) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 6).fill(Color(white: 0.12))
+                                    if let img = conn.overviewImages[i] {
+                                        Image(uiImage: img).resizable().scaledToFit().padding(1)
+                                    } else { ProgressView().tint(.white) }
+                                }
+                                .aspectRatio(CGFloat(conn.state?.slideAspect ?? 16.0 / 9.0), contentMode: .fit)
+                                .overlay(RoundedRectangle(cornerRadius: 6)
+                                    .stroke(i == conn.state?.currentIndex ? Color.blue : .white.opacity(0.15),
+                                            lineWidth: i == conn.state?.currentIndex ? 3 : 1))
+                                Text(conn.state.map { _ in "\(i + 1)" } ?? "")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(16)
+            }
+            .navigationTitle("All Slides")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: dismiss) } }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+
+private struct ConnectionSheet: View {
+    @Bindable var conn: ConnectionModel
+    let dismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    Image(systemName: "desktopcomputer").font(.title2).foregroundStyle(.tint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Connected to").font(.caption).foregroundStyle(.secondary)
+                        Text(conn.macName ?? "—").font(.headline)
+                    }
+                    Spacer()
+                    Circle().fill(.green).frame(width: 9, height: 9)
+                }
+                .padding(14)
+                .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 12))
+
+                Button { conn.requestOverview(); conn.send(.goToIndex(conn.state?.currentIndex ?? 0)) } label: {
+                    Label("Re-sync slides", systemImage: "arrow.triangle.2.circlepath")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered).controlSize(.large)
+
+                Button(role: .destructive) { conn.forget(); dismiss() } label: {
+                    Label("Forget this Mac", systemImage: "trash")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered).controlSize(.large)
+
+                Text("The remote controls one Mac at a time. Paired devices reconnect "
+                     + "automatically; forgetting requires re-entering the code from the Mac's "
+                     + "Remote ▸ Pairing & Status panel.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .navigationTitle("Connection").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: dismiss) } }
+        }
+        .preferredColorScheme(.dark)
     }
 }

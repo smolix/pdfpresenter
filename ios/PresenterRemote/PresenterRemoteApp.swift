@@ -12,7 +12,12 @@ struct PresenterRemoteApp: App {
             ContentView(conn: conn)
                 .preferredColorScheme(.dark)
                 .tint(.blue)
-                .onAppear { conn.start() }
+                .onAppear {
+                    #if DEBUG
+                    if CommandLine.arguments.contains("-demo") { conn.enterDemoMode(); return }
+                    #endif
+                    conn.start()
+                }
         }
     }
 }

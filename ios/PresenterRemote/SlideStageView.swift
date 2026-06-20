@@ -5,9 +5,10 @@ import SwiftUI
 import UIKit
 import PresenterKit
 
-/// Shows the current slide streamed from the Mac, overlays committed + in-flight
-/// ink, and (on iPad / when `interactive`) turns Apple Pencil or touch into
-/// strokes, erases, or a laser/spotlight pointer depending on the active tool.
+/// The current slide (streamed from the Mac) with committed + in-flight ink.
+/// In cursor mode a horizontal swipe advances/goes back; with a drawing or
+/// pointer tool, Apple Pencil / touch ink, erase, or move the laser/spotlight.
+/// The previous slide is held on screen until the new one loads (no black flash).
 struct SlideStageView: View {
     @Bindable var conn: ConnectionModel
     var interactive: Bool
@@ -16,16 +17,30 @@ struct SlideStageView: View {
         GeometryReader { geo in
             let aspect = CGFloat(conn.state?.slideAspect ?? 16.0 / 9.0)
             let fit = fittedRect(aspect: aspect, in: geo.size)
+            let p = conn.localPointer
+            let zoom: CGFloat = (magnify && p != nil) ? 2.2 : 1.0
+            let anchor = zoomAnchor(p, fit: fit, in: geo.size)
             ZStack {
                 Color.black
-                if let idx = conn.state?.currentIndex, let img = conn.slideImages[idx] {
-                    Image(uiImage: img).resizable().interpolation(.high).scaledToFit()
-                        .frame(width: fit.width, height: fit.height)
-                        .position(x: fit.midX, y: fit.midY)
-                } else {
-                    ProgressView().tint(.white)
+                ZStack {
+                    if let img = conn.displayImage {
+                        Image(uiImage: img).resizable().interpolation(.high).scaledToFit()
+                            .frame(width: fit.width, height: fit.height)
+                            .position(x: fit.midX, y: fit.midY)
+                    }
+                    SlideEffectsOverlay(strokes: conn.currentStrokes, live: conn.liveStroke,
+                                        laser: tool == .laser ? p : nil,
+                                        spotlight: tool == .spotlight ? p : nil,
+                                        fit: fit)
                 }
-                StrokeOverlay(strokes: conn.currentStrokes, live: conn.liveStroke, fit: fit)
+                .scaleEffect(zoom, anchor: anchor)
+                .clipped()
+                if conn.displayImage == nil {
+                    VStack(spacing: 10) {
+                        ProgressView().tint(.white)
+                        Text("Waiting for slide…").font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
                 if interactive && mode != .none {
                     PencilCanvas(onBegin: { handleBegin($0, $1) },
                                  onMove: { handleMove($0, $1) },
@@ -35,7 +50,14 @@ struct SlideStageView: View {
                 }
             }
             .contentShape(Rectangle())
+            .modifier(SwipeToNavigate(enabled: mode == .none, conn: conn))
         }
+    }
+
+    private func zoomAnchor(_ p: CGPoint?, fit: CGRect, in size: CGSize) -> UnitPoint {
+        guard let p, size.width > 0, size.height > 0 else { return .center }
+        return UnitPoint(x: (fit.minX + p.x * fit.width) / size.width,
+                         y: (fit.minY + p.y * fit.height) / size.height)
     }
 
     // MARK: Input routing
@@ -61,7 +83,7 @@ struct SlideStageView: View {
                                     colorIndex: conn.state?.penColorIndex ?? 0,
                                     highlighter: tool == .highlighter))
         case .erase:   conn.sendErase(p)
-        case .pointer: conn.sendPointer(p)
+        case .pointer: conn.localPointer = p; conn.sendPointer(p)
         case .none:    break
         }
     }
@@ -69,39 +91,83 @@ struct SlideStageView: View {
         switch mode {
         case .draw:    conn.extendStroke(p)
         case .erase:   conn.sendErase(p)
-        case .pointer: conn.sendPointer(p)
+        case .pointer: conn.localPointer = p; conn.sendPointer(p)
         case .none:    break
         }
     }
     private func handleEnd() {
         switch mode {
         case .draw:    conn.endStroke()
-        case .pointer: conn.sendPointer(nil)
+        case .pointer: conn.localPointer = nil; conn.sendPointer(nil)
         default:       break
         }
     }
 }
 
-/// Draws committed + live strokes in normalized coordinates, matching the
-/// Mac/audience rendering so the iPad preview lines up.
-struct StrokeOverlay: View {
+/// Attaches a horizontal swipe→navigate gesture only when enabled (cursor mode),
+/// so it never competes with the Pencil drawing layer.
+private struct SwipeToNavigate: ViewModifier {
+    let enabled: Bool
+    let conn: ConnectionModel
+    func body(content: Content) -> some View {
+        if enabled {
+            content.gesture(
+                DragGesture(minimumDistance: 24)
+                    .onEnded { v in
+                        let dx = v.translation.width, dy = v.translation.height
+                        guard abs(dx) > 48, abs(dx) > abs(dy) * 1.4 else { return }
+                        conn.send(dx < 0 ? .next : .prev)
+                    }
+            )
+        } else {
+            content
+        }
+    }
+}
+
+/// Draws committed + live strokes, the spotlight dim, and the laser dot in the
+/// slide's normalized coordinates — the same effects the desktop audience shows,
+/// so the presenter sees exactly what the room sees. Fills the geometry (so the
+/// spotlight can dim the whole stage) and maps points into `fit`.
+struct SlideEffectsOverlay: View {
     let strokes: [Stroke]
     let live: Stroke?
+    var laser: CGPoint? = nil
+    var spotlight: CGPoint? = nil
     let fit: CGRect
 
     var body: some View {
-        Canvas { ctx, _ in
-            for s in strokes { draw(s, &ctx) }
-            if let l = live { draw(l, &ctx) }
+        ZStack {
+            Canvas { ctx, _ in
+                for s in strokes { draw(s, &ctx) }
+                if let l = live { draw(l, &ctx) }
+            }
+            if let sp = spotlight {
+                Canvas { ctx, size in
+                    ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black.opacity(0.62)))
+                    ctx.blendMode = .destinationOut
+                    let r = max(fit.width, fit.height) * 0.11
+                    let c = point(sp)
+                    ctx.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+                             with: .color(.black))
+                }
+            }
+            if let l = laser {
+                Circle().fill(Color.red.opacity(0.75))
+                    .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1))
+                    .frame(width: 20, height: 20)
+                    .position(point(l))
+            }
         }
-        .frame(width: fit.width, height: fit.height)
-        .position(x: fit.midX, y: fit.midY)
         .allowsHitTesting(false)
     }
 
+    private func point(_ p: CGPoint) -> CGPoint {
+        CGPoint(x: fit.minX + p.x * fit.width, y: fit.minY + p.y * fit.height)
+    }
     private func draw(_ s: Stroke, _ ctx: inout GraphicsContext) {
         guard s.points.count > 1 else { return }
-        let pts = s.points.map { CGPoint(x: $0.x * fit.width, y: $0.y * fit.height) }
+        let pts = s.points.map { point($0) }
         var path = Path()
         path.move(to: pts[0])
         for p in pts.dropFirst() { path.addLine(to: p) }

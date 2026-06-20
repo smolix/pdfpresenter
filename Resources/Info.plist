@@ -25,7 +25,7 @@
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>PDF Presenter connects to the PDF Presenter Remote app on your iPhone or iPad to control the presentation.</string>
+    <string>PDF Presenter connects to the PDF Presenter app on your iPhone or iPad to control the presentation.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_pdfpres-ctl._tcp</string>

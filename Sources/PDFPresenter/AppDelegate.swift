@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var audienceDisplayMenu: NSMenu?
     private var presenterDisplayMenu: NSMenu?
 
-    // iOS companion ("PDF Presenter Remote") over Multipeer.
+    // iOS companion (PDF Presenter for iPhone / iPad) over Multipeer.
     private var remoteServer: RemoteServer!
     let remoteStatus = RemoteStatus()
     private var remoteWindow: NSWindow?

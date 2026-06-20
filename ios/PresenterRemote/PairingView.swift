@@ -17,7 +17,7 @@ struct PairingView: View {
             Spacer()
             Image(systemName: "rectangle.on.rectangle.angled")
                 .font(.system(size: 54)).foregroundStyle(.blue)
-            Text("PDF Presenter Remote").font(.title2.weight(.semibold))
+            Text("PDF Presenter").font(.title2.weight(.semibold))
 
             switch conn.phase {
             case .searching:

@@ -99,6 +99,7 @@ final class RemoteServer: NSObject, PeerLinkDelegate {
         case .strokeEnd:            model.commitStroke()
         case .erase(let p):         model.eraseAt(p)
         case .requestThumbnails:    sendFullSync(to: Array(pairedDevices))
+        case .requestAllThumbnails: sendAllThumbnails(to: Array(pairedDevices))
         default:                    break
         }
     }
@@ -190,12 +191,37 @@ final class RemoteServer: NSObject, PeerLinkDelegate {
         if model.isSplit { sendThumbnail(index: model.currentIndex, kind: .notes, to: devices) }
     }
 
+    /// Stream every slide at a small size for the companion's overview grid, on a
+    /// separate channel so it never overwrites the hi-res current/next. Sent one
+    /// per run-loop tick: Multipeer silently drops a tight burst of reliable
+    /// sends, so we let it flush between frames.
+    private func sendAllThumbnails(to devices: [String]) {
+        sendOverview(index: 0, count: model.pageCount, token: model.docToken, to: devices)
+    }
+
+    private func sendOverview(index: Int, count: Int, token: Int, to devices: [String]) {
+        guard index < count, token == model.docToken,
+              let doc = model.document, let page = doc.page(at: index) else { return }
+        let region = model.slideRegion(for: page)
+        if region.width > 0, region.height > 0 {
+            let key = "remote-ov-\(token)-\(index)-\(model.isSplit)"
+            let img = SlideRenderer.shared.image(page: page, region: region, key: key, pixelWidth: 360)
+            if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+               let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.6]) {
+                link.send(.overviewThumbnail(index: index, jpeg: jpeg, token: token), to: devices)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
+            self?.sendOverview(index: index + 1, count: count, token: token, to: devices)
+        }
+    }
+
     private func sendStrokes(to devices: [String]) {
         link.send(.strokes(index: model.currentIndex, strokes: model.strokes[model.currentIndex] ?? []),
                   to: devices)
     }
 
-    private func sendThumbnail(index: Int, kind: SlideKind, to devices: [String]) {
+    private func sendThumbnail(index: Int, kind: SlideKind, to devices: [String], pixelWidth: CGFloat = 1280) {
         guard let doc = model.document, index >= 0, index < model.pageCount,
               let page = doc.page(at: index) else { return }
         let region: CGRect
@@ -204,8 +230,8 @@ final class RemoteServer: NSObject, PeerLinkDelegate {
         case .notes: guard let n = model.notesRegion(for: page) else { return }; region = n
         }
         guard region.width > 0, region.height > 0 else { return }
-        let key = "remote-\(model.docToken)-\(index)-\(kind.rawValue)-\(model.isSplit)"
-        let img = SlideRenderer.shared.image(page: page, region: region, key: key, pixelWidth: 1280)
+        let key = "remote-\(model.docToken)-\(index)-\(kind.rawValue)-\(model.isSplit)-\(Int(pixelWidth))"
+        let img = SlideRenderer.shared.image(page: page, region: region, key: key, pixelWidth: pixelWidth)
         guard let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
               let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else { return }
         link.send(.thumbnail(index: index, kind: kind, jpeg: jpeg,

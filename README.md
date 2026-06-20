@@ -211,7 +211,7 @@ block device-to-device traffic, and even with Wi-Fi off (Bluetooth). The session
 is encrypted, and access is gated by a **one-time pairing code**:
 
 1. On the Mac, open **Remote ▸ Pairing & Status…** (⇧⌘R) to show a 6-digit code.
-2. On the device, open **PDF Presenter Remote**, tap your Mac, and enter the code.
+2. On the device, open **PDF Presenter** (the iOS app), tap your Mac, and enter the code.
 3. Paired devices are remembered and reconnect silently. Revoke them with
    **Remote ▸ Forget Paired Devices**.
 
