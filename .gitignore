@@ -1,0 +1,5 @@
+.build/
+*.app/
+.DS_Store
+*.swp
+/test-*.pdf
