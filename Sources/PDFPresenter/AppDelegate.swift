@@ -28,6 +28,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var presenterScreenChoice: CGDirectDisplayID?   // user override; nil = automatic (built-in)
     private var audienceDisplayMenu: NSMenu?
     private var presenterDisplayMenu: NSMenu?
+    private var openRecentMenu: NSMenu?
+
+    private var recentFiles: [String] {
+        get { UserDefaults.standard.stringArray(forKey: "recentFiles") ?? [] }
+        set { UserDefaults.standard.set(newValue, forKey: "recentFiles") }
+    }
 
     // iOS companion (PDF Presenter for iPhone / iPad) over Multipeer.
     private var remoteServer: RemoteServer!
@@ -45,9 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.loadSettings()
         setupMenu()
         setupWindows()
-        // Auto-present on an external display at launch (mirrors Keynote); a lone
-        // display starts windowed until the user presses Present / F.
-        audiencePresenting = audienceScreen(excluding: presenterScreen()) != nil
+        // Start windowed on one screen — don't auto-cover an external display.
+        // The user presents when ready (F / green zoom / Present menu).
+        audiencePresenting = false
         arrangeWindows()
         installKeyMonitor()
         startRemoteServer()
@@ -292,6 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func openURL(_ url: URL) {
         model.load(url: url)
         presenterWindow?.title = "Presenter — " + url.lastPathComponent
+        addRecent(url)
     }
 
     // MARK: Keyboard
@@ -408,6 +415,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let open = NSMenuItem(title: "Open…", action: #selector(openDocumentAction(_:)), keyEquivalent: "o")
         open.target = self
         fileMenu.addItem(open)
+        let recentItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
+        let recentMenu = NSMenu(title: "Open Recent")
+        recentItem.submenu = recentMenu
+        openRecentMenu = recentMenu
+        fileMenu.addItem(recentItem)
         let export = NSMenuItem(title: "Export Annotated PDF…", action: #selector(exportAction(_:)), keyEquivalent: "e")
         export.target = self
         fileMenu.addItem(export)
@@ -492,7 +504,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         NSApp.mainMenu = mainMenu
         rebuildDisplayMenus()
+        rebuildRecentMenu()
     }
+
+    // MARK: Recent files
+
+    private func addRecent(_ url: URL) {
+        var list = recentFiles
+        list.removeAll { $0 == url.path }
+        list.insert(url.path, at: 0)
+        recentFiles = Array(list.prefix(10))
+        rebuildRecentMenu()
+    }
+
+    private func rebuildRecentMenu() {
+        guard let m = openRecentMenu else { return }
+        m.removeAllItems()
+        let existing = recentFiles.filter { FileManager.default.fileExists(atPath: $0) }
+        if existing != recentFiles { recentFiles = existing }   // prune moved/deleted
+        if existing.isEmpty {
+            let none = NSMenuItem(title: "No Recent Files", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            m.addItem(none)
+            return
+        }
+        for path in existing {
+            let it = NSMenuItem(title: (path as NSString).lastPathComponent,
+                                action: #selector(openRecentAction(_:)), keyEquivalent: "")
+            it.target = self; it.representedObject = path; it.toolTip = path
+            m.addItem(it)
+        }
+        m.addItem(.separator())
+        let clear = NSMenuItem(title: "Clear Menu", action: #selector(clearRecentsAction(_:)), keyEquivalent: "")
+        clear.target = self
+        m.addItem(clear)
+    }
+
+    @objc private func openRecentAction(_ sender: NSMenuItem) {
+        if let path = sender.representedObject as? String { openURL(URL(fileURLWithPath: path)) }
+    }
+    @objc private func clearRecentsAction(_ s: Any?) { recentFiles = []; rebuildRecentMenu() }
 
     private func rebuildDisplayMenus() {
         let presScreen = presenterScreen()

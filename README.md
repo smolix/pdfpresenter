@@ -20,9 +20,12 @@ app that does one thing well.
 
 ## Features
 
-- **Second-screen presenter view** that auto-routes to an external display, with
-  explicit **per-role display assignment** (pick the presenter screen, the
-  audience screen, or swap them).
+- **Second-screen presenter view** with explicit **per-role display assignment**
+  (pick the presenter screen, the audience screen, or swap them). Starts windowed;
+  you choose when to go full-screen on the projector.
+- **iOS companion** ("PDF Presenter" for iPhone/iPad) — a Wi-Fi/Bluetooth remote
+  with a live presenter mirror and Apple-Pencil drawing (see below).
+- **Open Recent** — your recently opened decks under **File ▸ Open Recent**.
 - **Live PDF rendering** for plain decks, so **clickable links and embedded
   media** work on the audience screen (Beamer split decks use a fast bitmap crop).
 - **Speaker notes** from Beamer "notes on second screen" splits *or* a
@@ -102,9 +105,13 @@ artifacts live outside the source tree; nothing to clean up in the repo.
 
 ## Two-display behavior
 
-- **External display connected:** the presenter view fills your built-in screen;
-  the audience slide covers the external display full-screen automatically.
-  Hot-plugging a display re-routes the windows live.
+- **Start windowed:** the app opens on one screen with the presenter and a
+  windowed audience — it does **not** grab an external display full-screen on
+  its own. Present when you're ready (see below). Hot-plugging a display
+  re-routes the windows live.
+- **Go full-screen on the projector:** press **F**, click the audience window's
+  green **zoom** button, or use *Present ▸ Toggle Audience Full-Screen*. Press
+  **F**/**Esc** to return it to a window.
 - **Choosing displays:** under **Present** you can pin the **Presenter Display**
   and the **Audience Display** to specific screens (each is listed by its real
   name, so two identical monitors are still distinguishable), or **Swap

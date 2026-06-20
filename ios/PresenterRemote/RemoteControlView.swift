@@ -14,7 +14,6 @@ struct RemoteControlView: View {
     @State private var showOverview = false
     @State private var showConnection = false
     @State private var showJump = false
-    @State private var jumpText = ""
 
     private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
@@ -40,17 +39,8 @@ struct RemoteControlView: View {
             ConnectionSheet(conn: conn) { showConnection = false }
                 .presentationDetents([.medium])
         }
-        .alert("Go to Slide", isPresented: $showJump) {
-            TextField("Slide number", text: $jumpText)
-                .keyboardType(.numberPad)
-            Button("Go") {
-                let n = jumpText.filter(\.isNumber)
-                if !n.isEmpty { conn.send(.goToLabel(n)) }
-                jumpText = ""
-            }
-            Button("Cancel", role: .cancel) { jumpText = "" }
-        } message: {
-            Text("Type the number shown on the slide.")
+        .sheet(isPresented: $showJump) {
+            GoToSlideSheet(conn: conn) { showJump = false }
         }
         .onAppear {
             #if DEBUG
@@ -476,6 +466,82 @@ private struct OverviewSheet: View {
     }
 }
 
+
+/// Go-to-slide with a self-contained dark number pad — no system keyboard, so
+/// no white floating bubble on iPad. A hardware keyboard (digits / Return /
+/// Delete) works too.
+private struct GoToSlideSheet: View {
+    @Bindable var conn: ConnectionModel
+    let dismiss: () -> Void
+    @State private var digits = ""
+    @FocusState private var keyFocus: Bool
+
+    private func tap(_ n: Int) { if digits.count < 6 { digits += String(n) } }
+    private func backspace() { if !digits.isEmpty { digits.removeLast() } }
+    private func go() { if !digits.isEmpty { conn.send(.goToLabel(digits)) }; dismiss() }
+
+    var body: some View {
+        let cols = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+        VStack(spacing: 18) {
+            Text("Go to Slide").font(.headline)
+            Text(digits.isEmpty ? "0" : digits)
+                .font(.system(size: 46, weight: .semibold, design: .rounded)).monospacedDigit()
+                .foregroundStyle(digits.isEmpty ? .secondary : .primary)
+                .frame(height: 54)
+
+            LazyVGrid(columns: cols, spacing: 12) {
+                ForEach(1...9, id: \.self) { n in key(text: "\(n)") { tap(n) } }
+                key(icon: "xmark") { digits = "" }
+                key(text: "0") { tap(0) }
+                key(icon: "delete.left") { backspace() }
+            }
+
+            HStack(spacing: 12) {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.bordered).controlSize(.large).frame(maxWidth: .infinity)
+                Button("Go") { go() }
+                    .buttonStyle(.borderedProminent).controlSize(.large).frame(maxWidth: .infinity)
+                    .disabled(digits.isEmpty)
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: 380, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity)
+        .background(Color.black)
+        .presentationDetents([.height(500)])
+        .presentationBackground(.black)
+        .preferredColorScheme(.dark)
+        .focusable()
+        .focusEffectDisabled()
+        .focused($keyFocus)
+        .onKeyPress { press in
+            if let c = press.characters.first, let n = c.wholeNumberValue, c.isNumber { tap(n); return .handled }
+            switch press.key {
+            case .return: go(); return .handled
+            case .delete: backspace(); return .handled
+            default: return .ignored
+            }
+        }
+        .onAppear { keyFocus = true }
+    }
+
+    private func key(text: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(text).font(.title.weight(.medium))
+                .frame(maxWidth: .infinity).frame(height: 56)
+                .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain).foregroundStyle(.white)
+    }
+    private func key(icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.title2)
+                .frame(maxWidth: .infinity).frame(height: 56)
+                .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain).foregroundStyle(.white)
+    }
+}
 
 private struct ConnectionSheet: View {
     @Bindable var conn: ConnectionModel
