@@ -23,6 +23,9 @@ final class SlideRenderer {
         return img
     }
 
+    /// Drops all cached renders — call when the open document changes.
+    func clear() { cache.removeAllObjects() }
+
     /// Warms the cache off the main thread (best effort).
     func prefetch(page: PDFPage, region: CGRect, key: String, pixelWidth: CGFloat) {
         if cache.object(forKey: key as NSString) != nil { return }

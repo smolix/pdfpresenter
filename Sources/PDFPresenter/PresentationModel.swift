@@ -41,6 +41,8 @@ final class PresentationModel {
     var document: PDFDocument?
     var documentURL: URL?
     private(set) var detectedSplit = false
+    private(set) var pageIsWide = false  // page 0 wide enough to be a notes split at all (~1.9:1+)
+    private(set) var docToken = 0       // bumps each load() so render-cache keys can't collide across decks
 
     // MARK: Navigation
     var currentIndex = 0
@@ -90,7 +92,7 @@ final class PresentationModel {
 
     var isSplit: Bool {
         switch splitMode {
-        case .splitRight: return true
+        case .splitRight: return pageIsWide   // force split, but only on an actually-wide page
         case .single:     return false
         case .auto:       return detectedSplit
         }
@@ -123,12 +125,16 @@ final class PresentationModel {
         documentURL = url
         pageCount = doc.pageCount
         currentIndex = 0
+        docToken += 1
+        SlideRenderer.shared.clear()
         liveStroke = nil
         pointer = nil
         if let p = doc.page(at: 0) {
             let b = p.bounds(for: .cropBox)
+            let aspect = b.height > 0 ? b.width / b.height : 0
             // Beamer "show notes on second screen" produces double-wide pages.
-            detectedSplit = b.height > 0 && (b.width / b.height) > 2.1
+            detectedSplit = aspect > 2.1   // auto-detect a notes deck
+            pageIsWide = aspect > 1.9      // wide enough to split at all (guards forced split)
         }
         loadAnnotations()
         loadNotesSidecar()

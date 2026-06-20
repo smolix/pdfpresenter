@@ -68,7 +68,7 @@ struct SlideImageView: View {
         }
         guard region.width > 0, region.height > 0 else { return nil }
         let bucket = max(64, (pixelWidth / 128).rounded() * 128)
-        let key = "\(index)|\(kind)|\(model.isSplit)|\(Int(bucket))"
+        let key = "\(model.docToken)|\(index)|\(kind)|\(model.isSplit)|\(Int(bucket))"
         let img = SlideRenderer.shared.image(page: page, region: region, key: key, pixelWidth: bucket)
         return (img, region.width / region.height)
     }

@@ -50,6 +50,8 @@ Notes card. Plain (non-split) PDFs work too — they just show no notes.
 
 Auto-detection treats a deck as split when its page aspect ratio exceeds ~2.1:1.
 You can override it under **View ▸ Notes: Auto-detect / Split (Beamer) / None**.
+"Split (Beamer)" only takes effect on genuinely double-wide pages, so forcing it
+on a normal 16:9 deck safely shows the full slide rather than cropping it in half.
 
 ### Markdown / text sidecar (plain PDFs)
 

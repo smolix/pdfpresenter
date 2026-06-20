@@ -487,6 +487,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("DEMO snapshots written")
         }
 
+        if ProcessInfo.processInfo.environment["SPLITSWEEP"] != nil {
+            for (name, mode) in [("auto", SplitMode.auto), ("split", SplitMode.splitRight), ("single", SplitMode.single)] {
+                model.splitMode = mode
+                print("SPLIT \(name): isSplit=\(model.isSplit) slideAspect=\(String(format: "%.2f", model.slideAspect))")
+                writeSnapshot(AudienceView(model: model), size: CGSize(width: 1920, height: 1080),
+                              to: "\(outDir)/split-\(name).png")
+            }
+            model.splitMode = .auto
+        }
+
+        if let reload = ProcessInfo.processInfo.environment["RELOAD"] {
+            model.load(url: URL(fileURLWithPath: reload))
+            print("RELOAD pageCount=\(model.pageCount) isSplit=\(model.isSplit)")
+            writeSnapshot(AudienceView(model: model), size: CGSize(width: 1920, height: 1080),
+                          to: "\(outDir)/reload.png")
+        }
+
         print("SNAPSHOTS WRITTEN to \(outDir)")
         NSApp.terminate(nil)
     }
