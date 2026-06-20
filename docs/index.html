@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Presenter — a native macOS presenter view for PDF decks</title>
+<meta name="description" content="A fast, native macOS PDF slide presenter with a true second-screen presenter view, annotations, a countdown timer, and an iPhone/iPad remote.">
+<link rel="icon" href="img/icon.png">
+<style>
+  :root{
+    --bg:#0b0b0d; --panel:#141417; --panel2:#1b1b20; --line:#26262c;
+    --fg:#f2f2f4; --muted:#a0a0aa; --accent:#3380f5; --accent2:#5a9bff;
+    --radius:14px; --maxw:1040px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+  h1,h2,h3{line-height:1.2;letter-spacing:-0.02em}
+  code{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    padding:.12em .4em;font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;overflow:auto}
+  pre code{background:none;border:none;padding:0}
+
+  /* hero */
+  header.hero{padding:64px 0 36px;text-align:center;
+    background:radial-gradient(900px 380px at 50% -120px,rgba(51,128,245,.18),transparent 70%)}
+  .badge{display:inline-flex;gap:8px;align-items:center;color:var(--muted);font-size:13px;
+    border:1px solid var(--line);border-radius:999px;padding:5px 12px;margin-bottom:22px}
+  .appicon{width:104px;height:104px;border-radius:23px;box-shadow:0 12px 40px rgba(0,0,0,.5);margin-bottom:18px}
+  header.hero h1{font-size:clamp(34px,6vw,56px);margin:.1em 0 .15em}
+  header.hero p.tag{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:680px;margin:0 auto 28px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:9px;border-radius:12px;padding:13px 22px;
+    font-weight:600;font-size:16px;border:1px solid transparent}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.primary:hover{background:#2f76e0;text-decoration:none}
+  .btn.ghost{background:var(--panel);border-color:var(--line);color:var(--fg)}
+  .btn.ghost:hover{border-color:#3a3a44;text-decoration:none}
+  .req{color:var(--muted);font-size:13px;margin-top:14px}
+
+  /* shots */
+  .shotmain{margin:30px auto 0;max-width:980px}
+  .shotmain img{width:100%;border-radius:var(--radius);border:1px solid var(--line);
+    box-shadow:0 18px 60px rgba(0,0,0,.5)}
+  .shotrow{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+  .shotrow figure{margin:0}
+  .shotrow img{width:100%;border-radius:12px;border:1px solid var(--line)}
+  .shotrow figcaption{color:var(--muted);font-size:13px;margin-top:8px;text-align:center}
+
+  section{padding:54px 0;border-top:1px solid var(--line)}
+  section h2{font-size:clamp(24px,3.4vw,32px);margin:0 0 8px}
+  section .lead{color:var(--muted);margin:0 0 26px;max-width:720px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 18px 16px}
+  .card h3{font-size:17px;margin:0 0 6px}
+  .card p{margin:0;color:var(--muted);font-size:14.5px}
+  .card .ic{font-size:22px;display:block;margin-bottom:8px}
+
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;
+    padding:1px 7px;font:12.5px ui-monospace,Menlo,monospace;white-space:nowrap}
+
+  .split{display:grid;grid-template-columns:1.15fr .85fr;gap:34px;align-items:center}
+  @media(max-width:760px){.split{grid-template-columns:1fr}.shotrow{grid-template-columns:1fr}}
+
+  .note{background:rgba(51,128,245,.08);border:1px solid rgba(51,128,245,.3);
+    border-radius:12px;padding:14px 16px;color:#cfe0ff;font-size:14.5px}
+  footer{border-top:1px solid var(--line);padding:34px 0 60px;color:var(--muted);font-size:14px;text-align:center}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">Native macOS · Apache-2.0 · open source</span><br>
+    <img class="appicon" src="img/icon.png" alt="PDF Presenter app icon">
+    <h1>PDF Presenter</h1>
+    <p class="tag">A fast, native macOS presenter view for plain <strong>PDF</strong> decks —
+      second-screen output, live annotations, a talk-length countdown, and an
+      iPhone&nbsp;/&nbsp;iPad remote.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/smolix/pdfpresenter/releases/latest/download/PDFPresenter.app.zip">
+        ↓ Download for macOS</a>
+      <a class="btn ghost" href="https://github.com/smolix/pdfpresenter">View on GitHub</a>
+    </div>
+    <div class="req">Requires macOS 14 or later · Apple silicon &amp; Intel · ~1&nbsp;MB</div>
+    <div class="shotmain"><img src="img/presenter.png" alt="Presenter view with current slide, next slide, notes, and timer"></div>
+    <div class="shotrow">
+      <figure><img src="img/audience.png" alt="Full-bleed audience slide"><figcaption>Audience screen — full-bleed, links &amp; media live</figcaption></figure>
+      <figure><img src="img/spotlight.png" alt="Spotlight annotation tool"><figcaption>Spotlight, laser, pen, highlighter &amp; magnifier</figcaption></figure>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Why</h2>
+    <p class="lead">Preview.app has no presenter view, Keynote and PowerPoint don't open PDFs
+      nicely, and the dedicated tools are clunky or expensive. PDF Presenter is a small, fast,
+      native app that does one thing well.</p>
+    <div class="grid">
+      <div class="card"><span class="ic">🖥️</span><h3>True presenter view</h3><p>Current + next slide, notes, timer and clock on your laptop; the slide goes full-screen on the projector when you're ready.</p></div>
+      <div class="card"><span class="ic">🔗</span><h3>Live PDF rendering</h3><p>Plain decks render with a real PDFView so clickable links and embedded media work on the audience screen.</p></div>
+      <div class="card"><span class="ic">🗒️</span><h3>Speaker notes</h3><p>Beamer "notes on second screen" splits, or a Markdown / text sidecar next to the PDF.</p></div>
+      <div class="card"><span class="ic">✍️</span><h3>Annotations</h3><p>Laser, multi-colour pen, highlighter, eraser, spotlight and a magnifier — all live on the audience screen, and exportable to a flattened PDF.</p></div>
+      <div class="card"><span class="ic">⏱️</span><h3>Talk-length countdown</h3><p>Set a target; the timer turns amber, then red, as you run over.</p></div>
+      <div class="card"><span class="ic">🧭</span><h3>Display control</h3><p>Pick the presenter and audience screens, swap them, and start windowed — it never grabs your projector uninvited.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split">
+    <div>
+      <h2>iPhone &amp; iPad remote</h2>
+      <p class="lead">A companion app, <strong>PDF Presenter</strong> for iOS, turns your phone
+        or iPad into a wireless remote over Wi-Fi or Bluetooth.</p>
+      <div class="grid">
+        <div class="card"><h3>Glanceable mirror</h3><p>Current and next slide, notes, timer and slide counter in your hand.</p></div>
+        <div class="card"><h3>Full control</h3><p>Navigate, jump, blank, time, switch tools, layout and full-screen — your shortcuts as buttons.</p></div>
+        <div class="card"><h3>Apple Pencil ink</h3><p>Draw on the slide with pressure → width; it appears live on the audience screen. Plus a touch laser / spotlight.</p></div>
+        <div class="card"><h3>Private pairing</h3><p>A one-time code pairs the apps; paired devices reconnect automatically.</p></div>
+      </div>
+      <p style="margin-top:18px"><a href="https://github.com/smolix/pdfpresenter#ios-companion-app-pdf-presenter">Build &amp; install the iOS app →</a>
+        (free Apple ID; no Developer Program required)</p>
+    </div>
+    <div class="note">
+      <strong>How it connects</strong><br>
+      The Mac shows a 6-digit code under <em>Remote ▸ Pairing &amp; Status</em>; enter it once on
+      the device. The link uses Multipeer Connectivity, so it keeps working on guest Wi-Fi and
+      even over Bluetooth.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Keyboard</h2>
+    <p class="lead">Press <kbd>?</kbd> in the app for the full cheat-sheet.</p>
+    <table>
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td><kbd>→</kbd> <kbd>↓</kbd> <kbd>Space</kbd> · <kbd>←</kbd> <kbd>↑</kbd></td><td>Next / previous slide</td></tr>
+      <tr><td><kbd>123</kbd> then <kbd>↩</kbd></td><td>Jump to the slide numbered 123 (the PDF's own page labels)</td></tr>
+      <tr><td><kbd>Tab</kbd> / <kbd>G</kbd></td><td>Slide overview grid</td></tr>
+      <tr><td><kbd>L</kbd> <kbd>D</kbd> <kbd>H</kbd> <kbd>X</kbd> <kbd>S</kbd> <kbd>Z</kbd></td><td>Laser · pen · highlighter · eraser · spotlight · magnifier</td></tr>
+      <tr><td><kbd>B</kbd> / <kbd>W</kbd></td><td>Blank audience to black / white</td></tr>
+      <tr><td><kbd>F</kbd></td><td>Toggle audience full-screen</td></tr>
+      <tr><td><kbd>⌃M</kbd></td><td>Move audience to the next display</td></tr>
+      <tr><td><kbd>P</kbd> / <kbd>R</kbd></td><td>Pause-resume / reset timer</td></tr>
+      <tr><td><kbd>⌘E</kbd></td><td>Export annotated PDF</td></tr>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="lead">The app isn't notarized (it's free and open source), so macOS Gatekeeper
+      asks the first time.</p>
+    <ol style="color:var(--muted);max-width:720px">
+      <li><a href="https://github.com/smolix/pdfpresenter/releases/latest/download/PDFPresenter.app.zip">Download the zip</a> and unzip it.</li>
+      <li><strong>Right-click</strong> <code>PDFPresenter.app</code> → <strong>Open</strong>, then confirm <strong>Open</strong> (only needed once).</li>
+      <li>Open a deck with <kbd>⌘O</kbd>, or drag a PDF onto the icon.</li>
+    </ol>
+    <h3 style="margin-top:26px">Or build from source</h3>
+    <pre><code>git clone https://github.com/smolix/pdfpresenter
+cd pdfpresenter
+./build.sh            # assembles PDFPresenter.app
+open PDFPresenter.app --args /path/to/slides.pdf</code></pre>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    PDF Presenter — © 2026 Alex Smola · <a href="https://github.com/smolix/pdfpresenter/blob/main/LICENSE">Apache-2.0</a> ·
+    <a href="https://github.com/smolix/pdfpresenter">Source</a>
+  </div>
+</footer>
+
+</body>
+</html>

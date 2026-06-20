@@ -15,6 +15,7 @@ rm -rf "${APP}"
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 cp "${BIN}" "${APP}/Contents/MacOS/PDFPresenter"
 cp Resources/Info.plist "${APP}/Contents/Info.plist"
+[ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "${APP}/Contents/Resources/AppIcon.icns"
 
 echo "Done -> ${APP}"
 echo "Run with:  open ${APP} --args /path/to/slides.pdf"

@@ -4,13 +4,13 @@ A native macOS PDF slide presenter with a true **presenter view / second-screen*
 mode — like Keynote or PowerPoint, but for plain PDF decks. Built on PDFKit +
 SwiftUI/AppKit.
 
-When an external display is connected, the **slides go full-screen on the
-projector** automatically while your laptop shows the **presenter view**: the
-current slide, the next slide, speaker notes, a timer and clock, with a slide
-overview, annotation tools, a spotlight and magnifier, a talk-length countdown,
-and screen-blanking.
+**[Website &amp; download → smolix.github.io/pdfpresenter](https://smolix.github.io/pdfpresenter)**
 
-<!-- A screenshot of the presenter view goes well here. -->
+Your laptop shows the **presenter view** — the current slide, the next slide,
+speaker notes, a timer and clock, with a slide overview, annotation tools, a
+spotlight and magnifier, a talk-length countdown, and screen-blanking — while the
+**slide goes full-screen on the projector** when you choose to present. An
+**iPhone / iPad companion** acts as a wireless remote with Apple-Pencil drawing.
 
 ## Why
 
@@ -20,7 +20,14 @@ app that does one thing well.
 
 ## Features
 
-- **Second-screen presenter view** that auto-routes to an external display.
+- **Second-screen presenter view** with explicit **per-role display assignment**
+  (pick the presenter screen, the audience screen, or swap them). Starts windowed;
+  you choose when to go full-screen on the projector.
+- **iOS companion** ("PDF Presenter" for iPhone/iPad) — a Wi-Fi/Bluetooth remote
+  with a live presenter mirror and Apple-Pencil drawing (see below).
+- **Open Recent** — your recently opened decks under **File ▸ Open Recent**.
+- **Live PDF rendering** for plain decks, so **clickable links and embedded
+  media** work on the audience screen (Beamer split decks use a fast bitmap crop).
 - **Speaker notes** from Beamer "notes on second screen" splits *or* a
   Markdown/text sidecar (see below).
 - **Rearrangeable layout presets**: Notes Right, Notes Bottom, Slide Focus.
@@ -47,6 +54,12 @@ That produces double-wide pages (slide | notes). PDF Presenter detects this
 automatically and splits each page: the **left half** (the slide) goes to the
 projector and the current/next cards, the **right half** (the notes) shows in the
 Notes card. Plain (non-split) PDFs work too — they just show no notes.
+
+Split decks are shown to the audience as a bitmap crop of the left half (a
+PDFView can't display half a page). **Plain PDFs are rendered live with a real
+`PDFView`**, so **URL links and embedded media stay interactive** on the audience
+screen — click a link on the projected slide and it follows it, and following an
+in-document link keeps the presenter view in sync.
 
 Auto-detection treats a deck as split when its page aspect ratio exceeds ~2.1:1.
 You can override it under **View ▸ Notes: Auto-detect / Split (Beamer) / None**.
@@ -92,13 +105,26 @@ artifacts live outside the source tree; nothing to clean up in the repo.
 
 ## Two-display behavior
 
-- **External display connected:** the presenter view fills your built-in screen;
-  the audience slide covers the external display full-screen automatically.
-  Hot-plugging a display re-routes the windows live.
-- **Two external displays:** the largest external is used by default. Choose a
-  specific one under **Present ▸ Audience Display**, or press **M** to cycle.
+- **Start windowed:** the app opens on one screen with the presenter and a
+  windowed audience — it does **not** grab an external display full-screen on
+  its own. Present when you're ready (see below). Hot-plugging a display
+  re-routes the windows live.
+- **Go full-screen on the projector:** press **F**, click the audience window's
+  green **zoom** button, or use *Present ▸ Toggle Audience Full-Screen*. Press
+  **F**/**Esc** to return it to a window.
+- **Choosing displays:** under **Present** you can pin the **Presenter Display**
+  and the **Audience Display** to specific screens (each is listed by its real
+  name, so two identical monitors are still distinguishable), or **Swap
+  Presenter / Audience Displays** in one step. With three or more screens, press
+  **⌃M** to cycle the audience through the non-presenter displays — it always
+  advances from the display the audience is *currently* on, so the first press
+  moves it.
 - **Single display (e.g. testing):** presenter and audience show as two windows.
-  Press **F** (or *Present ▸ Toggle Audience Full-Screen*) to cover the screen.
+  The audience window is fully movable and minimizable; drag it to any display
+  and press **F**, click its green **zoom** button, or use *Present ▸ Toggle
+  Audience Full-Screen* to cover **that** display. Press **F**/**Esc** again to
+  return it to a window. The full-screen cover is a separate, dedicated window
+  (it never restyles the live view), so it can't flash black mid-talk.
 
 ## Keyboard
 
@@ -107,7 +133,7 @@ artifacts live outside the source tree; nothing to clean up in the repo.
 | → / ↓ / Space / PageDown | Next slide |
 | ← / ↑ / PageUp | Previous slide |
 | Home / End | First / last slide |
-| `123` then Return | Jump to slide 123 |
+| `123` then Return | Jump to the slide **numbered** 123 (the document's page label) |
 | Tab / `G` | Slide overview grid |
 | `B` / `W` | Blank audience to black / white |
 | `L` | Laser pointer (follows the cursor over the current slide) |
@@ -119,12 +145,24 @@ artifacts live outside the source tree; nothing to clean up in the repo.
 | `C` | Clear annotations on this slide |
 | `P` / `R` | Pause-resume / reset timer |
 | `E` | Cycle layout preset |
-| `M` | Move audience to the next display |
-| `F` | Toggle audience full-screen |
+| `⌃M` | Move audience to the next display |
+| `F` | Toggle audience full-screen on/off |
+| `?` | Show / hide the keyboard-shortcut help |
 | `⌘E` | Export annotated PDF |
 | Esc | Exit full-screen → un-blank → cancel magnifier → cancel tool |
 
-The timer starts automatically on the first slide advance.
+The timer starts automatically on the first slide advance. Press **`?`** any time
+(or **Help ▸ Keyboard Shortcuts**, ⌘?) for an on-screen cheat-sheet of every key.
+
+### Page numbers
+
+The slide counter and the type-a-number jump use the **document's own page
+labels** when the PDF defines them — i.e. the numbers actually printed on your
+slides. So if the title page isn't counted, or numbering restarts, or overlay
+frames repeat a number, typing that number jumps to the matching slide (the
+header shows the label over the physical slide count, e.g. `3 / 30`, and the
+tooltip spells out both). PDFs without page labels fall back to plain 1-based
+order, so nothing changes for them.
 
 ## Annotations
 
@@ -156,18 +194,90 @@ Switch with the toolbar `⋯` menu, **View ▸ Layout** (⌘1/⌘2/⌘3), or by 
 
 Cards always hug the slide's real aspect ratio, so there's no letterboxing.
 
+## iOS companion app (PDF Presenter Remote)
+
+A SwiftUI iPhone/iPad app that **controls the Mac** over Wi-Fi or Bluetooth. The
+PDF always stays on the Mac — the companion is a remote, not a viewer:
+
+- **iPhone** — a presenter's remote: next/prev, jump-to-slide, black/white blank,
+  timer, tools, layout, and audience full-screen, with a live mirror of the
+  current + next slide, notes, timer/countdown and slide counter.
+- **iPad** — additionally an **Apple Pencil drawing surface**: ink directly on
+  the current slide (pressure → width, the same six-colour palette, highlighter,
+  eraser) and it appears live on the audience screen. Drag to move a **laser** or
+  **spotlight** pointer, or set the zoom focus for the magnifier.
+
+It shares the exact `Stroke` / tool / palette types with the Mac (the
+`PresenterKit` package), so ink lands pixel-identically on the projector.
+
+### Connection & pairing
+
+Transport is **Multipeer Connectivity** — it auto-selects infrastructure Wi-Fi,
+peer-to-peer Wi-Fi, or Bluetooth, so it keeps working on guest networks that
+block device-to-device traffic, and even with Wi-Fi off (Bluetooth). The session
+is encrypted, and access is gated by a **one-time pairing code**:
+
+1. On the Mac, open **Remote ▸ Pairing & Status…** (⇧⌘R) to show a 6-digit code.
+2. On the device, open **PDF Presenter** (the iOS app), tap your Mac, and enter the code.
+3. Paired devices are remembered and reconnect silently. Revoke them with
+   **Remote ▸ Forget Paired Devices**.
+
+Both apps ask for **Local Network** permission on first run (allow it). Only your
+own devices should be paired; the code stops a stranger on the same Wi-Fi from
+taking over.
+
+### Building & running the companion (no paid account needed)
+
+The iOS app is its own Xcode project, generated from `ios/project.yml` with
+[XcodeGen](https://github.com/yonaskolb/XcodeGen):
+
+```bash
+sudo port install xcodegen          # MacPorts
+cd ios && xcodegen generate         # writes PresenterRemote.xcodeproj
+open PresenterRemote.xcodeproj
+```
+
+In Xcode, you can run it on your **own** iPhone/iPad with a free Apple ID — no
+Apple Developer Program required:
+
+1. **Settings → Accounts**: add your Apple ID. On the target's **Signing &
+   Capabilities** tab pick your **Personal Team** (the bundle ID
+   `org.smola.pdfpresenter.remote` is already set).
+2. On the device (iOS 17+): **Settings → Privacy & Security → Developer Mode →
+   On**, then restart.
+3. Pick the device as the run destination and **Run**. First launch:
+   **Settings → General → VPN & Device Management → trust** your developer
+   profile.
+
+Free-provisioning caveats: the build **expires after 7 days** (rebuild from Xcode
+to refresh — or use AltStore/SideStore to auto-refresh), max 3 sideloaded apps
+per device. For quick UI tweaks you can also run it in the **Simulator** (no
+signing), though Apple Pencil drawing needs a real iPad. Requires **iOS 17+**.
+
 ## Project layout
 
 ```
-Sources/PDFPresenter/
+Sources/PresenterKit/      shared by macOS + iOS (a SwiftPM library)
+  Model.swift             Stroke, Tool/BlankMode/SplitMode/LayoutPreset, palette
+  Protocol.swift          PresenterMessage / PresenterState / RemoteCommand wire types
+  PeerLink.swift          Multipeer Connectivity host/client transport
+  Geometry.swift          aspect-fit + time-format helpers
+Sources/PDFPresenter/      the macOS app
   main.swift              NSApplication entry point
-  AppDelegate.swift       windows, display routing, menu, keyboard, snapshot mode
+  AppDelegate.swift       windows, display routing, cover window, menu, keyboard
   PresentationModel.swift @Observable shared state (nav, split, timer, preset…)
+  RemoteServer.swift      hosts the iOS companion, applies control, streams state
+  RemotePanel.swift       pairing-code + connection-status panel
   SlideRenderer.swift     cropped-region PDF → NSImage rendering + cache
   SlideImageView.swift    one slide/notes region + annotation & interaction layers
-  AudienceView.swift      full-bleed audience screen
+  SlidePDFView.swift      live PDFView audience slide (links/media) for plain decks
+  AudienceView.swift      full-bleed audience screen (live PDF or bitmap crop)
   PresenterView.swift     toolbar, layout presets, cards, status bar, overview
-  UIHelpers.swift         aspect-fit + formatting helpers
+  HelpOverlay.swift       keyboard-shortcut cheat-sheet overlay
+  UIHelpers.swift         NSColor palette + RegionKind
+ios/                       the iOS companion (own Xcode project via XcodeGen)
+  project.yml             XcodeGen spec → PresenterRemote.xcodeproj
+  PresenterRemote/        ConnectionModel, PairingView, SlideStageView, controls
 tools/make_test_pdf.swift generates a Beamer-style split test deck
 ```
 

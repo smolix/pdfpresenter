@@ -12,11 +12,18 @@ struct AudienceView: View {
         ZStack {
             Color.black
             if model.document != nil {
-                SlideImageView(model: model,
-                               index: model.currentIndex,
-                               kind: .slide,
-                               showAnnotations: true,
-                               interactive: false)
+                if model.isSplit {
+                    // Beamer split deck: show the left (slide) half as a bitmap;
+                    // a PDFView can't crop to half a page.
+                    SlideImageView(model: model,
+                                   index: model.currentIndex,
+                                   kind: .slide,
+                                   showAnnotations: true,
+                                   interactive: false)
+                } else {
+                    // Plain PDF: render live so links and embedded media work.
+                    LivePDFSlide(model: model)
+                }
             } else {
                 Text("Open a PDF (⌘O)")
                     .font(.title2)
