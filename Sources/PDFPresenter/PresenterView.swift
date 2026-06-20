@@ -8,6 +8,7 @@ struct PresenterActions {
     var openFile: () -> Void = {}
     var toggleFullscreen: () -> Void = {}
     var presentOnSecond: () -> Void = {}
+    var exportAnnotated: () -> Void = {}
 }
 
 private let pageBG = Color(red: 0.09, green: 0.09, blue: 0.10)
@@ -30,8 +31,7 @@ struct PresenterView: View {
                                         label: "Current", accent: true,
                                         interactive: true, showAnnotations: true), f.current)
                         place(nextCard, f.next)
-                        place(SlideCard(model: model, index: model.currentIndex, kind: .notes,
-                                        label: "Notes", topAlign: true), f.notes)
+                        place(NotesCard(model: model), f.notes)
                         place(StatusBar(model: model), f.status)
                     }
                 }
@@ -139,13 +139,20 @@ struct SlideCard: View {
 
     @ViewBuilder private func content(size: CGSize) -> some View {
         if let img = renderedImage(pixelWidth: size.width * 2) {
+            let zoom: CGFloat = (model.magnify && model.pointer != nil
+                                 && kind == .slide && index == model.currentIndex) ? 2.2 : 1.0
+            let anchor = model.pointer.map { UnitPoint(x: $0.x, y: $0.y) } ?? .center
             ZStack {
                 Color.black
-                Image(nsImage: img).resizable().interpolation(.high)
-                    .frame(width: size.width, height: size.height)
-                if showAnnotations {
-                    AnnotationOverlay(model: model, index: index, fit: CGRect(origin: .zero, size: size))
+                ZStack {
+                    Image(nsImage: img).resizable().interpolation(.high)
+                        .frame(width: size.width, height: size.height)
+                    if showAnnotations {
+                        AnnotationOverlay(model: model, index: index, fit: CGRect(origin: .zero, size: size))
+                    }
                 }
+                .scaleEffect(zoom, anchor: anchor)
+                .clipped()
                 if interactive {
                     InteractionLayer(model: model, fit: CGRect(origin: .zero, size: size))
                 }
@@ -160,7 +167,7 @@ struct SlideCard: View {
     }
 
     private var placeholder: String {
-        if kind == .notes { return model.isSplit ? "—" : "No notes\n(not a split PDF)" }
+        if kind == .notes { return "No notes" }
         return index < 0 ? "End of deck" : "—"
     }
 
@@ -195,7 +202,55 @@ struct SlideCard: View {
     }
 }
 
-// MARK: - Status bar
+// MARK: - Notes card (image half for split decks, text for sidecar notes)
+
+struct NotesCard: View {
+    let model: PresentationModel
+
+    var body: some View {
+        if model.isSplit {
+            SlideCard(model: model, index: model.currentIndex, kind: .notes, label: "Notes", topAlign: true)
+        } else {
+            NotesTextCard(model: model)
+        }
+    }
+}
+
+struct NotesTextCard: View {
+    let model: PresentationModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("NOTES").font(.system(size: 10, weight: .bold)).tracking(0.6)
+                .foregroundStyle(.white.opacity(0.95))
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(.black.opacity(0.5), in: Capsule())
+                .padding(.leading, 10).padding(.top, 9).padding(.bottom, 6)
+            ScrollView {
+                Text(text)
+                    .font(.system(.title3))
+                    .foregroundStyle(hasNotes ? .white : .secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 16).padding(.bottom, 16)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private var hasNotes: Bool { model.currentNotesText != nil }
+    private var text: String {
+        model.currentNotesText ?? (model.hasSidecarNotes ? "—" : "No notes for this slide")
+    }
+}
+
+// MARK: - Status bar (timer / countdown / clock / progress)
 
 struct StatusBar: View {
     let model: PresentationModel
@@ -203,11 +258,7 @@ struct StatusBar: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             HStack(spacing: 18) {
-                HStack(spacing: 7) {
-                    Image(systemName: "timer")
-                    Text(elapsedString(model.elapsed))
-                        .font(.system(.title2, design: .rounded).weight(.semibold)).monospacedDigit()
-                }
+                timerView
                 HStack(spacing: 6) {
                     Image(systemName: "clock")
                     Text(clockString()).monospacedDigit()
@@ -217,6 +268,9 @@ struct StatusBar: View {
                 if model.blank != .none {
                     Label(model.blank == .black ? "Black" : "White", systemImage: "eye.slash")
                         .font(.callout).foregroundStyle(.orange)
+                }
+                if model.magnify {
+                    Label("Zoom", systemImage: "plus.magnifyingglass").font(.callout).foregroundStyle(.blue)
                 }
 
                 Spacer()
@@ -234,6 +288,33 @@ struct StatusBar: View {
             .foregroundStyle(.white)
             .background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 10))
         }
+    }
+
+    @ViewBuilder private var timerView: some View {
+        if let rem = model.remaining {
+            let over = rem < 0
+            HStack(spacing: 7) {
+                Image(systemName: over ? "exclamationmark.triangle.fill" : "timer")
+                Text((over ? "−" : "") + elapsedString(abs(rem)))
+                    .font(.system(.title2, design: .rounded).weight(.semibold)).monospacedDigit()
+            }
+            .foregroundStyle(timerColor(rem))
+            Text("/ \(elapsedString(model.talkLength))")
+                .font(.callout).foregroundStyle(.secondary).monospacedDigit()
+        } else {
+            HStack(spacing: 7) {
+                Image(systemName: "timer")
+                Text(elapsedString(model.elapsed))
+                    .font(.system(.title2, design: .rounded).weight(.semibold)).monospacedDigit()
+            }
+        }
+    }
+
+    private func timerColor(_ rem: TimeInterval) -> Color {
+        let warn = max(120, model.talkLength * 0.15)
+        if rem <= 0 { return .red }
+        if rem <= warn { return .orange }
+        return .white
     }
 }
 
@@ -256,7 +337,7 @@ struct TopBar: View {
     let actions: PresenterActions
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button { actions.openFile() } label: { Image(systemName: "folder") }
                 .help("Open PDF (⌘O)")
 
@@ -264,7 +345,7 @@ struct TopBar: View {
 
             Button { model.goPrev() } label: { Image(systemName: "chevron.left") }
             Text("\(model.pageCount == 0 ? 0 : model.currentIndex + 1) / \(model.pageCount)")
-                .monospacedDigit().frame(minWidth: 62)
+                .monospacedDigit().frame(minWidth: 58)
             Button { model.goNext() } label: { Image(systemName: "chevron.right") }
 
             Divider().frame(height: 18)
@@ -275,23 +356,40 @@ struct TopBar: View {
             Button { model.resetTimer() } label: { Image(systemName: "arrow.counterclockwise") }
                 .help("Reset timer (R)")
 
-            Spacer()
+            Spacer(minLength: 8)
 
             Picker("", selection: $model.tool) {
                 Image(systemName: "cursorarrow").tag(Tool.off)
                 Image(systemName: "cursorarrow.rays").tag(Tool.laser)
+                Image(systemName: "flashlight.on.fill").tag(Tool.spotlight)
                 Image(systemName: "pencil.tip").tag(Tool.pen)
+                Image(systemName: "highlighter").tag(Tool.highlighter)
+                Image(systemName: "eraser").tag(Tool.eraser)
             }
-            .pickerStyle(.segmented).frame(width: 116).labelsHidden()
-            Button { model.clearAnnotations() } label: { Image(systemName: "eraser") }
+            .pickerStyle(.segmented).frame(width: 208).labelsHidden()
+
+            if model.tool == .pen || model.tool == .highlighter {
+                HStack(spacing: 5) {
+                    ForEach(0..<annotationNSColors.count, id: \.self) { i in
+                        Circle().fill(annotationColor(i)).frame(width: 16, height: 16)
+                            .overlay(Circle().stroke(Color.primary.opacity(model.penColorIndex == i ? 0.9 : 0.25),
+                                                     lineWidth: model.penColorIndex == i ? 2 : 1))
+                            .onTapGesture { model.penColorIndex = i }
+                    }
+                }
+            }
+
+            Button { model.magnify.toggle() } label: {
+                Image(systemName: model.magnify ? "plus.magnifyingglass" : "magnifyingglass")
+            }
+            .foregroundStyle(model.magnify ? Color.accentColor : .primary).help("Magnifier (Z)")
+            Button { model.clearAnnotations() } label: { Image(systemName: "trash") }
                 .help("Clear annotations (C)")
 
             Divider().frame(height: 18)
 
             Button { model.toggleBlack() } label: { Image(systemName: "rectangle.fill") }
                 .foregroundStyle(model.blank == .black ? Color.accentColor : .primary).help("Blank black (B)")
-            Button { model.toggleWhite() } label: { Image(systemName: "rectangle") }
-                .foregroundStyle(model.blank == .white ? Color.accentColor : .primary).help("Blank white (W)")
             Button { model.showOverview.toggle() } label: { Image(systemName: "square.grid.3x3") }
                 .help("Overview (Tab)")
 
@@ -304,11 +402,19 @@ struct TopBar: View {
                     Text("Split (Beamer)").tag(SplitMode.splitRight)
                     Text("No notes").tag(SplitMode.single)
                 }
+                Picker("Talk length", selection: $model.talkLength) {
+                    Text("No target").tag(TimeInterval(0))
+                    ForEach([5, 10, 15, 20, 25, 30, 40, 45, 60], id: \.self) { m in
+                        Text("\(m) min").tag(TimeInterval(m * 60))
+                    }
+                }
+                Divider()
+                Button("Export Annotated PDF…") { actions.exportAnnotated() }
                 Divider()
                 Button("Present Full-Screen on External (⌘↩)") { actions.presentOnSecond() }
                 Button("Toggle Audience Full-Screen (F)") { actions.toggleFullscreen() }
             } label: { Image(systemName: "slider.horizontal.3") }
-            .menuStyle(.borderlessButton).frame(width: 40)
+            .menuStyle(.borderlessButton).frame(width: 38)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

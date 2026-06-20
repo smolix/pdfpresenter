@@ -7,7 +7,8 @@ SwiftUI/AppKit.
 When an external display is connected, the **slides go full-screen on the
 projector** automatically while your laptop shows the **presenter view**: the
 current slide, the next slide, speaker notes, a timer and clock, with a slide
-overview, laser pointer, freehand drawing, and screen-blanking.
+overview, annotation tools, a spotlight and magnifier, a talk-length countdown,
+and screen-blanking.
 
 <!-- A screenshot of the presenter view goes well here. -->
 
@@ -20,12 +21,18 @@ app that does one thing well.
 ## Features
 
 - **Second-screen presenter view** that auto-routes to an external display.
-- **Beamer speaker notes** via the "notes on second screen" split (see below).
+- **Speaker notes** from Beamer "notes on second screen" splits *or* a
+  Markdown/text sidecar (see below).
 - **Rearrangeable layout presets**: Notes Right, Notes Bottom, Slide Focus.
 - **Slide overview** grid — jump anywhere by click or by typing a number.
-- **Laser pointer** and **freehand drawing** shown live on the audience screen.
+- **Timer** with a wall clock and an optional **talk-length countdown** that
+  turns amber, then red, as you run over.
+- **Annotation tools**: laser pointer, multi-colour pen, highlighter, eraser,
+  and a **spotlight** — all shown live on the audience screen.
+- **Magnifier** that zooms into the slide around the cursor.
 - **Black / white screen** blanking to pull focus.
-- **Presentation timer** (with pause/reset) and wall clock.
+- **Annotations persist** next to the PDF and can be **exported as a flattened,
+  annotated PDF**.
 - Works with **0, 1, or 2 external displays**; pick which one is the audience.
 
 ## Speaker notes (Beamer)
@@ -43,6 +50,23 @@ Notes card. Plain (non-split) PDFs work too — they just show no notes.
 
 Auto-detection treats a deck as split when its page aspect ratio exceeds ~2.1:1.
 You can override it under **View ▸ Notes: Auto-detect / Split (Beamer) / None**.
+
+### Markdown / text sidecar (plain PDFs)
+
+For decks that aren't split, put a notes file next to the PDF with the **same
+base name** and a `.md`, `.markdown`, `.txt`, or `.notes` extension. Start each
+slide's notes with a header line — `# 3`, `## 3`, or `# Slide 3`:
+
+```markdown
+# 1
+Welcome — set the agenda.
+
+# 7
+KEY RESULT: emphasize the 3× speedup.
+- mention the batch-size caveat
+```
+
+The notes for the current slide then appear in the Notes card.
 
 ## Requirements
 
@@ -85,15 +109,39 @@ artifacts live outside the source tree; nothing to clean up in the repo.
 | Tab / `G` | Slide overview grid |
 | `B` / `W` | Blank audience to black / white |
 | `L` | Laser pointer (follows the cursor over the current slide) |
-| `D` | Draw / annotate on the current slide |
+| `D` | Pen — draw on the current slide |
+| `H` | Highlighter |
+| `X` | Eraser |
+| `S` | Spotlight (dim everything but a circle) |
+| `Z` | Magnifier (zoom into the cursor) |
 | `C` | Clear annotations on this slide |
 | `P` / `R` | Pause-resume / reset timer |
 | `E` | Cycle layout preset |
 | `M` | Move audience to the next display |
 | `F` | Toggle audience full-screen |
-| Esc | Exit full-screen → un-blank → cancel tool |
+| `⌘E` | Export annotated PDF |
+| Esc | Exit full-screen → un-blank → cancel magnifier → cancel tool |
 
 The timer starts automatically on the first slide advance.
+
+## Annotations
+
+Pick a tool from the toolbar or with the keys above: **pen**, **highlighter**,
+**eraser**, **laser**, **spotlight**, plus a **magnifier**. The pen and
+highlighter share a six-colour palette. Everything you draw or point to appears
+on the audience screen in real time.
+
+Annotations are saved automatically to a sidecar file next to the PDF
+(`<name>.pdfpres.json`) and reload the next time you open the deck. Use
+**File ▸ Export Annotated PDF…** (⌘E) to write a flattened copy with your
+drawings burned in.
+
+## Timer & countdown
+
+The timer counts up and starts on your first slide advance. Set a target under
+the toolbar `⋯` menu ▸ **Talk length**; the status bar then shows time
+**remaining**, turning amber as you near the limit and red (with a `−`) once
+you're over.
 
 ## Layout presets
 

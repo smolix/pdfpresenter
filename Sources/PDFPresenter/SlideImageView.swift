@@ -5,7 +5,7 @@ import SwiftUI
 import PDFKit
 
 /// Shows one cropped region of one page, letterboxed on black, with optional
-/// annotation overlay and (for the current slide) laser/pen interaction.
+/// annotation overlay, magnifier, and (for the current slide) tool interaction.
 struct SlideImageView: View {
     let model: PresentationModel
     let index: Int
@@ -19,26 +19,40 @@ struct SlideImageView: View {
                 Color.black
                 if let (img, aspect) = rendered(pixelWidth: geo.size.width * 2) {
                     let fit = fittedRect(aspect: aspect, in: geo.size)
-                    Image(nsImage: img)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: fit.width, height: fit.height)
-                        .position(x: fit.midX, y: fit.midY)
-                    if showAnnotations {
-                        AnnotationOverlay(model: model, index: index, fit: fit)
+                    let zoom = zoomScale
+                    let anchor = zoomAnchor(fit: fit, in: geo.size)
+                    ZStack {
+                        Image(nsImage: img)
+                            .resizable()
+                            .interpolation(.high)
+                            .frame(width: fit.width, height: fit.height)
+                            .position(x: fit.midX, y: fit.midY)
+                        if showAnnotations {
+                            AnnotationOverlay(model: model, index: index, fit: fit)
+                        }
                     }
+                    .scaleEffect(zoom, anchor: anchor)
+                    .clipped()
                     if interactive {
                         InteractionLayer(model: model, fit: fit)
                     }
                 } else if kind == .notes {
-                    Text("No notes\n(this isn't a split / notes PDF)")
-                        .multilineTextAlignment(.center)
+                    Text("No notes")
                         .foregroundStyle(.secondary)
                         .font(.title3)
                 }
             }
             .contentShape(Rectangle())
         }
+    }
+
+    private var zoomScale: CGFloat {
+        (model.magnify && model.pointer != nil && index == model.currentIndex) ? 2.2 : 1.0
+    }
+    private func zoomAnchor(fit: CGRect, in size: CGSize) -> UnitPoint {
+        guard let p = model.pointer, size.width > 0, size.height > 0 else { return .center }
+        return UnitPoint(x: (fit.minX + p.x * fit.width) / size.width,
+                         y: (fit.minY + p.y * fit.height) / size.height)
     }
 
     private func rendered(pixelWidth: CGFloat) -> (NSImage, CGFloat)? {
@@ -60,7 +74,7 @@ struct SlideImageView: View {
     }
 }
 
-/// Draws committed + live strokes and the laser dot for `index`.
+/// Draws committed + live strokes, the spotlight dim, and the laser dot.
 struct AnnotationOverlay: View {
     let model: PresentationModel
     let index: Int
@@ -69,8 +83,10 @@ struct AnnotationOverlay: View {
     var body: some View {
         // Read tracked state here so the view re-evaluates when it changes.
         let strokes = model.strokes[index] ?? []
-        let live = (index == model.currentIndex) ? model.liveStroke : nil
-        let laser = (index == model.currentIndex && model.tool == .laser) ? model.pointer : nil
+        let isCurrent = index == model.currentIndex
+        let live = isCurrent ? model.liveStroke : nil
+        let laser = (isCurrent && model.tool == .laser) ? model.pointer : nil
+        let spot = (isCurrent && model.tool == .spotlight) ? model.pointer : nil
 
         return ZStack {
             Canvas { ctx, _ in
@@ -79,32 +95,48 @@ struct AnnotationOverlay: View {
             }
             .allowsHitTesting(false)
 
+            if let sp = spot {
+                Canvas { ctx, size in
+                    ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black.opacity(0.62)))
+                    ctx.blendMode = .destinationOut
+                    let r = max(fit.width, fit.height) * 0.11
+                    let c = point(sp)
+                    ctx.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+                             with: .color(.black))
+                }
+                .allowsHitTesting(false)
+            }
+
             if let p = laser {
                 Circle()
                     .fill(Color.red.opacity(0.75))
                     .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1))
                     .frame(width: 20, height: 20)
-                    .position(x: fit.minX + p.x * fit.width, y: fit.minY + p.y * fit.height)
+                    .position(point(p))
                     .allowsHitTesting(false)
             }
         }
     }
 
+    private func point(_ p: CGPoint) -> CGPoint {
+        CGPoint(x: fit.minX + p.x * fit.width, y: fit.minY + p.y * fit.height)
+    }
+
     private func draw(_ s: Stroke, in ctx: inout GraphicsContext) {
         guard s.points.count > 1 else { return }
-        let pts = s.points.map { CGPoint(x: fit.minX + $0.x * fit.width, y: fit.minY + $0.y * fit.height) }
+        let pts = s.points.map { point($0) }
         var path = Path()
         path.move(to: pts[0])
         for p in pts.dropFirst() { path.addLine(to: p) }
-        ctx.stroke(path,
-                   with: .color(.red),
-                   style: StrokeStyle(lineWidth: max(2, s.width * fit.width),
-                                      lineCap: .round, lineJoin: .round))
+        let color = annotationColor(s.colorIndex)
+        let w = max(2, s.width * fit.width)
+        let style = StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round)
+        ctx.stroke(path, with: .color(s.highlighter ? color.opacity(0.35) : color), style: style)
     }
 }
 
-/// Transparent layer over the current slide that turns mouse movement into a
-/// laser position (hover) or a pen stroke (drag), in normalized slide coords.
+/// Transparent layer over the current slide that turns mouse movement into the
+/// active tool's effect (laser/spotlight position, pen/highlighter stroke, erase).
 struct InteractionLayer: View {
     let model: PresentationModel
     let fit: CGRect
@@ -114,7 +146,6 @@ struct InteractionLayer: View {
             .fill(Color.clear)
             .contentShape(Rectangle())
             .onContinuousHover { phase in
-                guard model.tool == .laser else { return }
                 switch phase {
                 case .active(let loc): model.pointer = norm(loc)
                 case .ended:           model.pointer = nil
@@ -123,17 +154,20 @@ struct InteractionLayer: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { v in
-                        guard model.tool == .pen else { return }
                         let p = norm(v.location)
-                        if model.liveStroke == nil {
-                            model.liveStroke = Stroke(points: [p])
-                        } else {
-                            model.liveStroke?.points.append(p)
+                        model.pointer = p
+                        switch model.tool {
+                        case .pen, .highlighter:
+                            if model.liveStroke == nil { model.beginStroke(at: p) }
+                            else { model.extendStroke(to: p) }
+                        case .eraser:
+                            model.eraseAt(p)
+                        default:
+                            break
                         }
                     }
                     .onEnded { _ in
-                        guard model.tool == .pen else { return }
-                        model.commitStroke()
+                        if model.tool == .pen || model.tool == .highlighter { model.commitStroke() }
                     }
             )
     }

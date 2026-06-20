@@ -7,7 +7,7 @@ import Observation
 import CoreGraphics
 
 enum BlankMode { case none, black, white }
-enum Tool: String { case off, laser, pen }
+enum Tool: String { case off, laser, pen, highlighter, eraser, spotlight }
 enum SplitMode { case auto, splitRight, single }
 
 /// Presenter-view arrangements. Each lays out the same cards (current / next /
@@ -26,10 +26,12 @@ enum LayoutPreset: String, CaseIterable {
 /// A freehand annotation stroke. Points are normalized (0...1) inside the slide
 /// region, y measured downward (SwiftUI convention) so it maps identically on
 /// the presenter panel and the audience screen regardless of their pixel sizes.
-struct Stroke: Identifiable {
-    let id = UUID()
+struct Stroke: Identifiable, Codable {
+    var id = UUID()
     var points: [CGPoint]
-    var width: CGFloat = 0.004   // as a fraction of slide width
+    var width: CGFloat = 0.005       // fraction of slide width
+    var colorIndex: Int = 0          // index into the annotation palette
+    var highlighter: Bool = false
 }
 
 @Observable
@@ -51,7 +53,9 @@ final class PresentationModel {
 
     // MARK: Tools / annotations
     var tool: Tool = .off
-    var pointer: CGPoint? = nil            // normalized laser position in slide region
+    var penColorIndex = 0
+    var pointer: CGPoint? = nil            // normalized cursor over the current slide
+    var magnify = false                    // zoom-into-pointer toggle
     var strokes: [Int: [Stroke]] = [:]     // committed strokes, keyed by slide index
     var liveStroke: Stroke? = nil          // stroke currently being drawn
 
@@ -59,14 +63,23 @@ final class PresentationModel {
     var timerRunning = false
     var accumulated: TimeInterval = 0
     var startedAt: Date? = nil
+    var talkLength: TimeInterval = 0 {     // 0 = count up only; >0 = count down
+        didSet { UserDefaults.standard.set(talkLength, forKey: "talkLength") }
+    }
+
+    // MARK: Speaker notes (sidecar, for non-split decks)
+    var notesSidecar: [Int: String] = [:]  // 1-based slide number -> notes text
 
     // MARK: Presenter layout
     var preset: LayoutPreset = .notesRight {
         didSet { UserDefaults.standard.set(preset.rawValue, forKey: "presenterPreset") }
     }
-    func loadPreset() {
+
+    func loadSettings() {
         if let s = UserDefaults.standard.string(forKey: "presenterPreset"),
            let p = LayoutPreset(rawValue: s) { preset = p }
+        let t = UserDefaults.standard.double(forKey: "talkLength")
+        if t > 0 { talkLength = t }
     }
     func cyclePreset() {
         let all = LayoutPreset.allCases
@@ -97,13 +110,19 @@ final class PresentationModel {
         return r.width / r.height
     }
 
+    /// Sidecar notes for the current slide (nil when none / empty).
+    var currentNotesText: String? {
+        let t = notesSidecar[currentIndex + 1]
+        return (t?.isEmpty == false) ? t : nil
+    }
+    var hasSidecarNotes: Bool { !notesSidecar.isEmpty }
+
     func load(url: URL) {
         guard let doc = PDFDocument(url: url) else { return }
         document = doc
         documentURL = url
         pageCount = doc.pageCount
         currentIndex = 0
-        strokes = [:]
         liveStroke = nil
         pointer = nil
         if let p = doc.page(at: 0) {
@@ -111,6 +130,8 @@ final class PresentationModel {
             // Beamer "show notes on second screen" produces double-wide pages.
             detectedSplit = b.height > 0 && (b.width / b.height) > 2.1
         }
+        loadAnnotations()
+        loadNotesSidecar()
     }
 
     /// The slide half of a page, in 0-based cropBox-local points.
@@ -142,6 +163,8 @@ final class PresentationModel {
     var elapsed: TimeInterval {
         accumulated + (timerRunning ? (startedAt.map { -$0.timeIntervalSinceNow } ?? 0) : 0)
     }
+    /// Time remaining against the talk-length target, or nil when no target set.
+    var remaining: TimeInterval? { talkLength > 0 ? talkLength - elapsed : nil }
     func toggleTimer() {
         if timerRunning {
             accumulated = elapsed
@@ -161,15 +184,95 @@ final class PresentationModel {
     }
 
     // MARK: Annotations
+    func beginStroke(at p: CGPoint) {
+        liveStroke = Stroke(points: [p],
+                            width: tool == .highlighter ? 0.022 : 0.005,
+                            colorIndex: penColorIndex,
+                            highlighter: tool == .highlighter)
+    }
+    func extendStroke(to p: CGPoint) { liveStroke?.points.append(p) }
     func commitStroke() {
         if let s = liveStroke, s.points.count > 1 {
             strokes[currentIndex, default: []].append(s)
+            saveAnnotations()
         }
         liveStroke = nil
+    }
+    func eraseAt(_ p: CGPoint, radius: CGFloat = 0.03) {
+        guard var arr = strokes[currentIndex], !arr.isEmpty else { return }
+        let before = arr.count
+        arr.removeAll { s in s.points.contains { hypot($0.x - p.x, $0.y - p.y) <= radius } }
+        if arr.count != before { strokes[currentIndex] = arr; saveAnnotations() }
     }
     func clearAnnotations() {
         strokes[currentIndex] = []
         liveStroke = nil
         pointer = nil
+        saveAnnotations()
+    }
+    var hasAnnotations: Bool { strokes.values.contains { !$0.isEmpty } }
+
+    // MARK: Annotation persistence (sidecar JSON next to the PDF)
+    private var annotationsURL: URL? {
+        documentURL?.deletingPathExtension().appendingPathExtension("pdfpres.json")
+    }
+    func saveAnnotations() {
+        guard let url = annotationsURL else { return }
+        let dict = Dictionary(uniqueKeysWithValues: strokes.map { (String($0.key), $0.value) })
+        if dict.values.allSatisfy({ $0.isEmpty }) {
+            try? FileManager.default.removeItem(at: url)   // nothing to keep
+            return
+        }
+        if let data = try? JSONEncoder().encode(dict) { try? data.write(to: url) }
+    }
+    private func loadAnnotations() {
+        strokes = [:]
+        guard let url = annotationsURL, let data = try? Data(contentsOf: url),
+              let dict = try? JSONDecoder().decode([String: [Stroke]].self, from: data) else { return }
+        var s: [Int: [Stroke]] = [:]
+        for (k, v) in dict { if let i = Int(k) { s[i] = v } }
+        strokes = s
+    }
+
+    // MARK: Notes sidecar parsing
+    private func loadNotesSidecar() {
+        notesSidecar = [:]
+        guard let url = documentURL else { return }
+        let base = url.deletingPathExtension()
+        for ext in ["md", "markdown", "txt", "notes"] {
+            let candidate = base.appendingPathExtension(ext)
+            if let text = try? String(contentsOf: candidate, encoding: .utf8) {
+                notesSidecar = Self.parseNotes(text)
+                break
+            }
+        }
+    }
+
+    /// Parses notes keyed by slide number. A line like `# 3`, `## 3`, or
+    /// `# Slide 3` starts the notes for that slide; following lines are its body.
+    static func parseNotes(_ text: String) -> [Int: String] {
+        var result: [Int: String] = [:]
+        var current: Int? = nil
+        var buffer: [String] = []
+        func flush() {
+            if let c = current {
+                result[c] = buffer.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            buffer = []
+        }
+        for line in text.components(separatedBy: .newlines) {
+            if let n = slideHeaderNumber(line) { flush(); current = n }
+            else { buffer.append(line) }
+        }
+        flush()
+        return result
+    }
+    private static func slideHeaderNumber(_ line: String) -> Int? {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("#") else { return nil }
+        var body = t.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces).lowercased()
+        if body.hasPrefix("slide") { body = String(body.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+        let digits = body.prefix(while: { $0.isNumber })
+        return digits.isEmpty ? nil : Int(digits)
     }
 }

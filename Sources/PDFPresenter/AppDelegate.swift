@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        model.loadPreset()
+        model.loadSettings()
         setupMenu()
         setupWindows()
         arrangeWindows()
@@ -67,7 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let actions = PresenterActions(
             openFile: { [weak self] in self?.openDocumentAction(nil) },
             toggleFullscreen: { [weak self] in self?.toggleAudienceFullscreen() },
-            presentOnSecond: { [weak self] in self?.arrangeWindows(present: true) }
+            presentOnSecond: { [weak self] in self?.arrangeWindows(present: true) },
+            exportAnnotated: { [weak self] in self?.exportAnnotatedPDF() }
         )
 
         let presenter = NSWindow(
@@ -251,6 +252,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "g": model.showOverview.toggle(); return true
         case "l": model.tool = (model.tool == .laser ? .off : .laser); return true
         case "d": model.tool = (model.tool == .pen ? .off : .pen); return true
+        case "h": model.tool = (model.tool == .highlighter ? .off : .highlighter); return true
+        case "s": model.tool = (model.tool == .spotlight ? .off : .spotlight); return true
+        case "x": model.tool = (model.tool == .eraser ? .off : .eraser); return true
+        case "z": model.magnify.toggle(); return true
         case "c": model.clearAnnotations(); return true
         case "p": model.toggleTimer(); return true
         case "r": model.resetTimer(); return true
@@ -270,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleEscape() {
         if audienceCovering { toggleAudienceFullscreen() }
         else if model.blank != .none { model.blank = .none }
+        else if model.magnify { model.magnify = false }
         else if model.tool != .off { model.tool = .off }
         gotoBuffer = ""
     }
@@ -293,6 +299,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let open = NSMenuItem(title: "Open…", action: #selector(openDocumentAction(_:)), keyEquivalent: "o")
         open.target = self
         fileMenu.addItem(open)
+        let export = NSMenuItem(title: "Export Annotated PDF…", action: #selector(exportAction(_:)), keyEquivalent: "e")
+        export.target = self
+        fileMenu.addItem(export)
+        fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         fileItem.submenu = fileMenu
 
@@ -379,6 +389,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         audienceScreenChoice = CGDirectDisplayID(sender.tag); arrangeWindows()
     }
 
+    // MARK: Export annotated PDF
+
+    @objc private func exportAction(_ sender: Any?) { exportAnnotatedPDF() }
+
+    private func exportAnnotatedPDF() {
+        guard let doc = model.document, model.pageCount > 0,
+              let firstPage = doc.page(at: 0) else { NSSound.beep(); return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue =
+            (model.documentURL?.deletingPathExtension().lastPathComponent ?? "slides") + "-annotated.pdf"
+        guard panel.runModal() == .OK, let outURL = panel.url else { return }
+
+        var mediaBox = CGRect(origin: .zero, size: model.slideRegion(for: firstPage).size)
+        guard let ctx = CGContext(outURL as CFURL, mediaBox: &mediaBox, nil) else { NSSound.beep(); return }
+        let pageSize = mediaBox.size
+
+        for i in 0..<model.pageCount {
+            guard let page = doc.page(at: i) else { continue }
+            let region = model.slideRegion(for: page)
+            ctx.beginPDFPage(nil)
+
+            // Burn the slide bitmap, then the strokes (normalized y-down -> PDF y-up).
+            let img = SlideRenderer.shared.image(page: page, region: region,
+                                                 key: "export-\(i)", pixelWidth: max(1600, region.width * 2))
+            if let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                ctx.draw(cg, in: CGRect(origin: .zero, size: pageSize))
+            }
+            for s in (model.strokes[i] ?? []) where s.points.count > 1 {
+                let base = annotationNSColors[annotationColorIndex(s.colorIndex)]
+                ctx.setStrokeColor((s.highlighter ? base.withAlphaComponent(0.35) : base).cgColor)
+                ctx.setLineWidth(max(1, s.width * pageSize.width))
+                ctx.setLineCap(.round); ctx.setLineJoin(.round)
+                ctx.beginPath()
+                for (j, p) in s.points.enumerated() {
+                    let pt = CGPoint(x: p.x * pageSize.width, y: (1 - p.y) * pageSize.height)
+                    if j == 0 { ctx.move(to: pt) } else { ctx.addLine(to: pt) }
+                }
+                ctx.strokePath()
+            }
+            ctx.endPDFPage()
+        }
+        ctx.closePDF()
+        NSWorkspace.shared.open(outURL)
+    }
+
     // MARK: Snapshot mode (offscreen render for verification)
 
     private func runSnapshotMode() {
@@ -392,7 +449,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let notes = model.notesRegion(for: p).map { "\($0)" } ?? "nil"
             print("DIAG detectedSplit=\(model.detectedSplit) isSplit=\(model.isSplit) "
                 + "cropBox=\(b.size) slideRegion=\(model.slideRegion(for: p)) notesRegion=\(notes) "
-                + "slideAspect=\(String(format: "%.3f", model.slideAspect))")
+                + "slideAspect=\(String(format: "%.3f", model.slideAspect)) "
+                + "sidecarNotes=\(model.notesSidecar.count)")
         } else {
             print("DIAG no document loaded")
         }
@@ -403,6 +461,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         writeSnapshot(AudienceView(model: model), size: CGSize(width: 1920, height: 1080),
                       to: "\(outDir)/audience.png")
+
+        if ProcessInfo.processInfo.environment["DEMO"] != nil {
+            // Countdown: 20-min talk, 18:00 elapsed -> 2:00 left (amber).
+            model.talkLength = 20 * 60
+            model.accumulated = 18 * 60
+            // Red pen + yellow highlighter on the current slide.
+            model.strokes[0] = [
+                Stroke(points: (0...24).map { CGPoint(x: 0.26 + Double($0) * 0.013,
+                                                      y: 0.56 + sin(Double($0) * 0.45) * 0.05) },
+                       width: 0.006, colorIndex: 0, highlighter: false),
+                Stroke(points: (0...20).map { CGPoint(x: 0.27 + Double($0) * 0.015, y: 0.72) },
+                       width: 0.022, colorIndex: 3, highlighter: true),
+            ]
+            model.preset = .notesRight
+            writeSnapshot(PresenterView(model: model), size: CGSize(width: 1512, height: 900),
+                          to: "\(outDir)/demo-annotations-countdown.png")
+            model.tool = .spotlight; model.pointer = CGPoint(x: 0.5, y: 0.45)
+            writeSnapshot(AudienceView(model: model), size: CGSize(width: 1920, height: 1080),
+                          to: "\(outDir)/demo-spotlight.png")
+            model.tool = .off; model.magnify = true; model.pointer = CGPoint(x: 0.5, y: 0.5)
+            writeSnapshot(AudienceView(model: model), size: CGSize(width: 1920, height: 1080),
+                          to: "\(outDir)/demo-zoom.png")
+            model.magnify = false; model.pointer = nil
+            print("DEMO snapshots written")
+        }
+
         print("SNAPSHOTS WRITTEN to \(outDir)")
         NSApp.terminate(nil)
     }
