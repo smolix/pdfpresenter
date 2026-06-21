@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var presenterDisplayMenu: NSMenu?
     private var openRecentMenu: NSMenu?
     private var arrangeWork: DispatchWorkItem?      // coalesces screen-parameter bursts
+    private lazy var docWatcher = DocumentWatcher { [weak self] in self?.reloadDocument() }
 
     private var recentFiles: [String] {
         get { UserDefaults.standard.stringArray(forKey: "recentFiles") ?? [] }
@@ -50,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         model.loadSettings()
+        if UserDefaults.standard.object(forKey: "autoReload") != nil {
+            docWatcher.isEnabled = UserDefaults.standard.bool(forKey: "autoReload")   // default on
+        }
         setupMenu()
         setupWindows()
         // Start windowed on one screen — don't auto-cover an external display.
@@ -317,6 +321,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.load(url: url)
         presenterWindow?.title = "Presenter — " + url.lastPathComponent
         addRecent(url)
+        docWatcher.watch(url)   // hot-reload when the file is rebuilt on disk
+    }
+
+    /// Fired by the watcher once the file on disk has settled after a rebuild.
+    private func reloadDocument() {
+        if model.reload() {
+            docWatcher.markLoaded()
+            presenterWindow?.title = "Presenter — " + (model.documentURL?.lastPathComponent ?? "")
+        }
+    }
+
+    @objc private func toggleAutoReload(_ sender: NSMenuItem) {
+        docWatcher.isEnabled.toggle()
+        UserDefaults.standard.set(docWatcher.isEnabled, forKey: "autoReload")
+        sender.state = docWatcher.isEnabled ? .on : .off
     }
 
     // MARK: Keyboard
@@ -441,6 +460,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let export = NSMenuItem(title: "Export Annotated PDF…", action: #selector(exportAction(_:)), keyEquivalent: "e")
         export.target = self
         fileMenu.addItem(export)
+        fileMenu.addItem(.separator())
+        let autoReload = NSMenuItem(title: "Auto-Reload on Change",
+                                    action: #selector(toggleAutoReload(_:)), keyEquivalent: "")
+        autoReload.target = self
+        autoReload.state = docWatcher.isEnabled ? .on : .off
+        fileMenu.addItem(autoReload)
         fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         fileItem.submenu = fileMenu
