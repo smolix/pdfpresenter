@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var audienceDisplayMenu: NSMenu?
     private var presenterDisplayMenu: NSMenu?
     private var openRecentMenu: NSMenu?
+    private var arrangeWork: DispatchWorkItem?      // coalesces screen-parameter bursts
 
     private var recentFiles: [String] {
         get { UserDefaults.standard.stringArray(forKey: "recentFiles") ?? [] }
@@ -124,7 +125,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         cover.isReleasedWhenClosed = false
         cover.backgroundColor = .black
         cover.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 1)
-        cover.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // Pin the cover to ITS display's space. Deliberately no .canJoinAllSpaces:
+        // an above-everything window that roams every space ping-pongs for focus
+        // with a full-screen app on another display. Keynote likewise keeps its
+        // slideshow on one screen; .fullScreenAuxiliary still lets the cover sit
+        // over a full-screen window on its own display.
+        cover.collectionBehavior = [.stationary, .fullScreenAuxiliary]
         cover.contentView = NSHostingView(rootView: AudienceView(model: model))
         coverWindow = cover
 
@@ -168,36 +174,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
            let s = NSScreen.screens.first(where: { displayID($0) == id && $0 != pres }) { return s }
         if audienceScreenChoice == nil, let s = audienceWindow.screen, s != pres { return s }
         if let s = audienceScreen(excluding: pres) { return s }
-        return audienceWindow.screen ?? pres
+        return pres   // single display: the cover takes over the only screen
     }
 
-    @objc private func screensChanged() { arrangeWindows() }
+    /// Screen-parameter changes arrive in bursts — a display plugged in, but also
+    /// ANY display (or app) entering/leaving full screen, which shifts a menu bar
+    /// or visibleFrame. Coalesce the burst and re-lay-out *passively*, so we never
+    /// yank key focus back to the presenter and start a war with that full-screen
+    /// app (the "two displays alternating for attention" bug).
+    @objc private func screensChanged() {
+        arrangeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.arrangeWindows(activate: false) }
+        arrangeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+    }
 
-    /// Re-lays out both windows for the current display configuration. Idempotent
-    /// — safe to call repeatedly from screen-parameter changes.
-    private func arrangeWindows() {
+    /// Re-lays out both windows for the current display configuration. Idempotent.
+    /// `activate` raises and keys the presenter (user-driven layout); pass `false`
+    /// for passive re-layouts (screen-parameter changes) so focus stays put.
+    private func arrangeWindows(activate: Bool = true) {
         guard presenterWindow != nil, audienceWindow != nil, coverWindow != nil else { return }
         let presScreen = presenterScreen()
         presenterWindow.setFrame(presScreen.visibleFrame, display: true)
-        presenterWindow.makeKeyAndOrderFront(nil)
+        if activate { presenterWindow.makeKeyAndOrderFront(nil) } else { presenterWindow.orderFront(nil) }
 
         if audiencePresenting {
-            showCover(on: resolveAudienceScreen())
+            showCover(on: resolveAudienceScreen(), activate: activate)
         } else {
             hideCover()
-            placeWindowedAudience(on: audienceScreen(excluding: presScreen))
+            placeWindowedAudience(on: audienceScreen(excluding: presScreen), activate: activate)
         }
         rebuildDisplayMenus()
     }
 
     /// Shows the borderless cover on `screen` and tucks the windowed audience
-    /// away so there's just one audience surface.
-    private func showCover(on screen: NSScreen) {
+    /// away so there's just one audience surface. `activate` re-keys the presenter
+    /// (skip it on passive re-layouts so we don't steal focus).
+    private func showCover(on screen: NSScreen, activate: Bool = true) {
         coverWindow.setFrame(screen.frame, display: true)
         coverWindow.orderFrontRegardless()
         audienceWindow.orderOut(nil)
         audiencePresenting = true
-        presenterWindow.makeKeyAndOrderFront(nil)
+        if activate { presenterWindow.makeKeyAndOrderFront(nil) }
     }
 
     private func hideCover() {
@@ -208,7 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Positions the windowed audience on `screen`. By default it won't fight a
     /// manual drag (only repositions a hidden/placeless window); `force` moves it
     /// regardless — used when the user explicitly retargets via M / the menu.
-    private func placeWindowedAudience(on screen: NSScreen?, force: Bool = false) {
+    private func placeWindowedAudience(on screen: NSScreen?, force: Bool = false, activate: Bool = true) {
         let s = screen ?? presenterScreen()
         if force || !audienceWindow.isVisible || audienceWindow.screen == nil {
             audienceWindow.setFrame(
@@ -216,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 display: true)
         }
         audienceWindow.orderFront(nil)
-        presenterWindow.makeKeyAndOrderFront(nil)
+        if activate { presenterWindow.makeKeyAndOrderFront(nil) }
     }
 
     /// Begin presenting full-screen. `screen` nil resolves automatically.
