@@ -52,6 +52,10 @@
   .shotrow figure{margin:0}
   .shotrow img{width:100%;border-radius:12px;border:1px solid var(--line)}
   .shotrow figcaption{color:var(--muted);font-size:13px;margin-top:8px;text-align:center}
+  .devshots{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;margin-top:22px}
+  .devshots figure{margin:0;text-align:center}
+  .devshots img{height:520px;width:auto;max-width:100%;border-radius:20px;border:1px solid var(--line)}
+  .devshots figcaption{color:var(--muted);font-size:13px;margin-top:10px}
 
   section{padding:54px 0;border-top:1px solid var(--line)}
   section h2{font-size:clamp(24px,3.4vw,32px);margin:0 0 8px}
@@ -93,11 +97,6 @@
       <a class="btn ghost" href="https://github.com/smolix/pdfpresenter">View on GitHub</a>
     </div>
     <div class="req">Requires macOS 14 or later · Apple silicon &amp; Intel · ~1&nbsp;MB</div>
-    <div class="shotmain"><img src="img/presenter.png" alt="Presenter view with current slide, next slide, notes, and timer"></div>
-    <div class="shotrow">
-      <figure><img src="img/audience.png" alt="Full-bleed audience slide"><figcaption>Audience screen — full-bleed, links &amp; media live</figcaption></figure>
-      <figure><img src="img/spotlight.png" alt="Spotlight annotation tool"><figcaption>Spotlight, laser, pen, highlighter &amp; magnifier</figcaption></figure>
-    </div>
   </div>
 </header>
 
@@ -138,6 +137,22 @@
       The Mac shows a 6-digit code under <em>Remote ▸ Pairing &amp; Status</em>; enter it once on
       the device. The link uses Multipeer Connectivity, so it keeps working on guest Wi-Fi and
       even over Bluetooth.
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:48px">
+    <h3 style="font-size:22px;margin:0 0 6px">Present from the iPad or iPhone — no Mac</h3>
+    <p class="lead" style="margin-top:0">Plug a display into the device, open a PDF through the iOS
+      file picker, and present. The audience slide fills the external display (letterboxed to its
+      aspect ratio); the drawable presenter view — current &amp; next slide, notes, timer and the
+      full tool palette — stays in your hands.</p>
+    <div class="shotmain"><img src="img/ios-audience.png"
+        alt="A talk's title slide filling a connected external display"></div>
+    <div class="devshots">
+      <figure><img src="img/ios-ipad.png" alt="iPad presenter view driving the slides">
+        <figcaption>iPad — presenter view (Apple Pencil drawable)</figcaption></figure>
+      <figure><img src="img/ios-iphone.png" alt="iPhone presenter view driving the slides">
+        <figcaption>iPhone — the same controls, pocket-sized</figcaption></figure>
     </div>
   </div>
 </section>

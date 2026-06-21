@@ -54,6 +54,14 @@ struct ContentView: View {
             if CommandLine.arguments.contains("-localdemo") {
                 deck.loadDemo()
                 presentLocal = true
+            } else if CommandLine.arguments.contains("-localfile") {
+                // Present the first PDF dropped into the app's Documents (screenshots).
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                if let pdf = (try? FileManager.default.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil))?
+                    .first(where: { $0.pathExtension.lowercased() == "pdf" }) {
+                    deck.load(url: pdf)
+                    presentLocal = true
+                }
             }
             #endif
         }
