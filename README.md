@@ -210,6 +210,16 @@ PDF always stays on the Mac — the companion is a remote, not a viewer:
 It shares the exact `Stroke` / tool / palette types with the Mac (the
 `PresenterKit` package), so ink lands pixel-identically on the projector.
 
+### Present from the iPad/iPhone — no Mac
+
+The companion can also **drive a presentation on its own**, for when you plug a
+display straight into the iPad/iPhone. On the pairing screen tap **Present a PDF
+on this device**, pick a PDF, and you get the full presenter view on the device —
+current/next slides, notes, timer, the tool palette, and Apple-Pencil drawing —
+while the **audience slide goes to the connected external display** (expanded to
+fill it, letterboxed to the slide's aspect ratio). The Mac isn't involved; the
+deck is opened locally through the iOS file picker.
+
 ### Connection & pairing
 
 Transport is **Multipeer Connectivity** — it auto-selects infrastructure Wi-Fi,

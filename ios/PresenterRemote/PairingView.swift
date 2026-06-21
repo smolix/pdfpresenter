@@ -8,6 +8,7 @@ import SwiftUI
 /// Control" panel.
 struct PairingView: View {
     @Bindable var conn: ConnectionModel
+    var presentLocalAction: () -> Void = {}
     @State private var code = ""
     @State private var lastSubmitted = ""
     @FocusState private var codeFocused: Bool
@@ -53,6 +54,17 @@ struct PairingView: View {
                 EmptyView()
             }
             Spacer()
+
+            // Standalone: drive the show from this device with an external display.
+            VStack(spacing: 8) {
+                Divider().frame(maxWidth: 280)
+                Button(action: presentLocalAction) {
+                    Label("Present a PDF on this device", systemImage: "tv.and.hifispeaker.fill")
+                }
+                Text("Plug in a display, open a PDF, and present — no Mac needed.")
+                    .footnote()
+            }
+            .padding(.bottom, 8)
         }
         .frame(maxWidth: 460)
         .padding()
