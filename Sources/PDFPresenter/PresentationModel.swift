@@ -203,6 +203,26 @@ final class PresentationModel {
     func goLast()  { commitStroke(); currentIndex = max(0, pageCount - 1); pointer = nil }
     func goTo(_ i: Int) { if i >= 0 && i < pageCount { commitStroke(); currentIndex = i; pointer = nil } }
 
+    /// The position to return to after a non-sequential jump (overview grid, type-a-number,
+    /// Home/End). Set via markReturn() at the jump site; consumed by jumpBack().
+    private(set) var returnMark: Int? = nil
+
+    /// Remember the current slide so jumpBack() can return to it. Call right before a
+    /// non-sequential jump. Plain next/prev deliberately do not mark, so the mark always
+    /// points at where you were before you jumped away.
+    func markReturn() { returnMark = currentIndex }
+
+    /// Return to the slide held by the last markReturn(). The jump is itself reversible:
+    /// it stashes the current slide as the new mark, so pressing again toggles back. No-op
+    /// when nothing is marked, the mark is stale, or it already points at the current slide.
+    func jumpBack() {
+        guard let mark = returnMark, mark >= 0, mark < pageCount, mark != currentIndex else { return }
+        commitStroke()
+        returnMark = currentIndex
+        currentIndex = mark
+        pointer = nil
+    }
+
     // MARK: Blank
     func toggleBlack() { blank = (blank == .black) ? .none : .black }
     func toggleWhite() { blank = (blank == .white) ? .none : .white }

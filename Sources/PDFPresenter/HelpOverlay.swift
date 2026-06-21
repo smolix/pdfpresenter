@@ -26,6 +26,7 @@ struct HelpOverlay: View {
             Shortcut(keys: "← ↑ ⇞", label: "Previous slide"),
             Shortcut(keys: "Home / End", label: "First / last slide"),
             Shortcut(keys: "123 ⏎", label: "Jump to the slide numbered 123"),
+            Shortcut(keys: "`", label: "Jump back to where you were before the last jump"),
             Shortcut(keys: "Tab / G", label: "Slide overview grid"),
         ]),
         Section(title: "Annotate", items: [

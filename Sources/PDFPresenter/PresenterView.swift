@@ -465,7 +465,7 @@ struct OverviewGrid: View {
                                     .foregroundStyle(i == model.currentIndex ? Color.accentColor : .white)
                             }
                             .contentShape(Rectangle())
-                            .onTapGesture { model.goTo(i); model.showOverview = false }
+                            .onTapGesture { model.markReturn(); model.goTo(i); model.showOverview = false }
                         }
                     }
                     .padding()

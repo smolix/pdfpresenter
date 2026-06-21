@@ -383,8 +383,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case 124, 125, 49: advance(); return true                        // right / down / space
         case 116:          model.goPrev(); return true                   // page up
         case 121:          advance(); return true                        // page down
-        case 115:          model.goFirst(); return true                  // home
-        case 119:          model.goLast(); return true                   // end
+        case 115:          model.markReturn(); model.goFirst(); return true  // home
+        case 119:          model.markReturn(); model.goLast(); return true   // end
         case 53:           handleEscape(); return true                   // esc
         case 48:           model.showOverview.toggle(); return true      // tab
         case 36:                                                          // return
@@ -408,6 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "p": model.toggleTimer(); return true
         case "r": model.resetTimer(); return true
         case "e": model.cyclePreset(); return true
+        case "`": model.jumpBack(); return true
         case "?": model.showHelp = true; return true
         default:
             if ch.count == 1, Int(ch) != nil { gotoBuffer += ch; return true }
@@ -416,6 +417,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func jumpToBuffer() {
+        // Remember where we were so ` can bounce back after answering a question.
+        model.markReturn()
         // Resolve the typed number against the document's page labels (the numbers
         // printed on the slides); fall back to the raw index, then beep.
         if !model.goToLabel(gotoBuffer) {
