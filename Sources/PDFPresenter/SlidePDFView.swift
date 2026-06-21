@@ -25,6 +25,7 @@ struct LivePDFSlide: View {
                 Color.black
                 ZStack {
                     PDFPageView(model: model)
+                        .id(model.docToken)   // rebuild & reload the PDFView when the deck is rebuilt
                         .frame(width: fit.width, height: fit.height)
                         .position(x: fit.midX, y: fit.midY)
                     AnnotationOverlay(model: model, index: index, fit: fit)

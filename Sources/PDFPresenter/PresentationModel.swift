@@ -151,6 +151,37 @@ final class PresentationModel {
         loadNotesSidecar()
     }
 
+    /// Re-reads the current document from disk (e.g. after a LaTeX rebuild)
+    /// without losing the presenter's place or annotations. Keeps the page
+    /// identified by its document label when that label survives the rebuild,
+    /// else clamps the old index into the new page count. Returns false if the
+    /// file can't be read yet (so a caller can leave the old deck in place).
+    @discardableResult
+    func reload() -> Bool {
+        guard let url = documentURL, let doc = PDFDocument(url: url), doc.pageCount > 0 else { return false }
+        let oldLabel = currentLabel
+        let oldIndex = currentIndex
+        document = doc
+        pageCount = doc.pageCount
+        docToken += 1
+        SlideRenderer.shared.clear()
+        liveStroke = nil
+        pointer = nil
+        if let p = doc.page(at: 0) {
+            let b = p.bounds(for: .cropBox)
+            let aspect = b.height > 0 ? b.width / b.height : 0
+            detectedSplit = aspect > 2.1
+            pageIsWide = aspect > 1.9
+        }
+        if let idx = (0..<pageCount).first(where: { label(for: $0) == oldLabel }) {
+            currentIndex = idx
+        } else {
+            currentIndex = min(max(0, oldIndex), pageCount - 1)
+        }
+        loadNotesSidecar()   // notes may have been edited alongside the deck
+        return true          // annotations (keyed by index) are kept as-is
+    }
+
     /// The slide half of a page, in 0-based cropBox-local points.
     func slideRegion(for page: PDFPage) -> CGRect {
         let b = page.bounds(for: .cropBox)
