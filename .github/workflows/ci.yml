@@ -28,6 +28,12 @@ jobs:
       - name: Assemble the macOS .app
         run: ./build.sh release
 
+      # The .xcodeproj is gitignored — it's generated from ios/project.yml.
+      - name: Generate the iOS Xcode project
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          cd ios && xcodegen generate
+
       # Tier 3 — compiles the iOS companion against the simulator SDK so
       # iOS-only breakage is caught even though we don't drive the UI.
       # A generic destination needs no specific simulator device to exist.
