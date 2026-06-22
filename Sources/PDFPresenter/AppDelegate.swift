@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var openRecentMenu: NSMenu?
     private var arrangeWork: DispatchWorkItem?      // coalesces screen-parameter bursts
     private lazy var docWatcher = DocumentWatcher { [weak self] in self?.reloadDocument() }
+    private let wakeGuard = WakeGuard()             // holds the display awake while presenting
 
     private var recentFiles: [String] {
         get { UserDefaults.standard.stringArray(forKey: "recentFiles") ?? [] }
@@ -219,12 +220,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         coverWindow.orderFrontRegardless()
         audienceWindow.orderOut(nil)
         audiencePresenting = true
+        wakeGuard.setPresenting(true)   // no screensaver / display sleep while presenting
         if activate { presenterWindow.makeKeyAndOrderFront(nil) }
     }
 
     private func hideCover() {
         coverWindow.orderOut(nil)
         audiencePresenting = false
+        wakeGuard.setPresenting(false)   // let the display sleep normally again
     }
 
     /// Positions the windowed audience on `screen`. By default it won't fight a
