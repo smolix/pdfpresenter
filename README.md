@@ -134,6 +134,7 @@ artifacts live outside the source tree; nothing to clean up in the repo.
 | ← / ↑ / PageUp | Previous slide |
 | Home / End | First / last slide |
 | `123` then Return | Jump to the slide **numbered** 123 (the document's page label) |
+| `` ` `` | Jump back to where you were before the last jump (press again to toggle) |
 | Tab / `G` | Slide overview grid |
 | `B` / `W` | Blank audience to black / white |
 | `L` | Laser pointer (follows the cursor over the current slide) |
