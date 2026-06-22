@@ -12,6 +12,27 @@ final class PresentationSession {
     static let shared = PresentationSession()
     var deck: LocalDeck?
     var externalConnected = false
+
+    @ObservationIgnored private var powerObserver: (any NSObjectProtocol)?
+
+    private init() {
+        // Recompute the wake state whenever the battery flips Low Power Mode on
+        // or off, so the screen lock follows the power source live.
+        powerObserver = NotificationCenter.default.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshWakeState() }
+        }
+    }
+
+    /// Hold the screen awake while presenting to an external display, but yield
+    /// to iOS the moment Low Power Mode turns on (a low battery): then the device
+    /// is free to dim and sleep per the user's settings instead of staying lit on
+    /// a near-flat battery. Call after `externalConnected` changes.
+    func refreshWakeState() {
+        UIApplication.shared.isIdleTimerDisabled =
+            externalConnected && !ProcessInfo.processInfo.isLowPowerModeEnabled
+    }
 }
 
 /// Root of the external display: the audience slide once a deck is presenting,
@@ -55,7 +76,10 @@ final class ExternalSceneDelegate: UIResponder, UIWindowSceneDelegate {
         w.rootViewController = host
         w.isHidden = false
         window = w
-        MainActor.assumeIsolated { PresentationSession.shared.externalConnected = true }
+        MainActor.assumeIsolated {
+            PresentationSession.shared.externalConnected = true
+            PresentationSession.shared.refreshWakeState()   // keep the device awake while it drives the display
+        }
     }
 
     /// Keep the window filling the screen if its geometry changes.
@@ -69,6 +93,9 @@ final class ExternalSceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
-        MainActor.assumeIsolated { PresentationSession.shared.externalConnected = false }
+        MainActor.assumeIsolated {
+            PresentationSession.shared.externalConnected = false
+            PresentationSession.shared.refreshWakeState()   // display gone — allow normal idle sleep
+        }
     }
 }
