@@ -3,6 +3,7 @@
 
 import SwiftUI
 import UIKit
+import PresenterKit
 
 /// Shared hand-off between the presenter UI and the external-display scene.
 /// The presenter sets `deck` while presenting; the external `UIWindowScene`
@@ -31,7 +32,8 @@ final class PresentationSession {
     /// a near-flat battery. Call after `externalConnected` changes.
     func refreshWakeState() {
         UIApplication.shared.isIdleTimerDisabled =
-            externalConnected && !ProcessInfo.processInfo.isLowPowerModeEnabled
+            shouldKeepAwake(presenting: externalConnected,
+                            lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
     }
 }
 

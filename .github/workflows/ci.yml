@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain versions
+        run: swift --version && xcodebuild -version
+
+      # Tier 1/2 — pure logic, runs headless, no simulator.
+      - name: Unit tests (PresenterKit)
+        run: swift test
+
+      # Proves the double-clickable macOS bundle still assembles.
+      - name: Assemble the macOS .app
+        run: ./build.sh release
+
+      # Tier 3 — compiles the iOS companion against the simulator SDK so
+      # iOS-only breakage is caught even though we don't drive the UI.
+      # A generic destination needs no specific simulator device to exist.
+      - name: Build the iOS companion (simulator)
+        run: |
+          xcodebuild build \
+            -project ios/PresenterRemote.xcodeproj \
+            -scheme PresenterRemote \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
