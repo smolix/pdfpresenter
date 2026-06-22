@@ -18,6 +18,11 @@ let package = Package(
             dependencies: ["PresenterKit"],
             path: "Sources/PDFPresenter"
         ),
+        .testTarget(
+            name: "PresenterKitTests",
+            dependencies: ["PresenterKit"],
+            path: "Tests/PresenterKitTests"
+        ),
     ],
     swiftLanguageVersions: [.v5]
 )

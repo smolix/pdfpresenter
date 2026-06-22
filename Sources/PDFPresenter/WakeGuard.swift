@@ -2,6 +2,7 @@
 // Copyright 2026 Alex Smola
 
 import AppKit
+import PresenterKit
 
 /// Keeps the display awake — no dimming, no screensaver — while a presentation
 /// is up on the audience screen, so a slide never blacks out mid-talk. It yields
@@ -35,7 +36,8 @@ final class WakeGuard {
     }
 
     private func update() {
-        let shouldHold = presenting && !ProcessInfo.processInfo.isLowPowerModeEnabled
+        let shouldHold = shouldKeepAwake(presenting: presenting,
+                                         lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
         if shouldHold {
             guard activity == nil else { return }
             activity = ProcessInfo.processInfo.beginActivity(

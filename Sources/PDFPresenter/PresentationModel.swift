@@ -68,11 +68,8 @@ final class PresentationModel {
     // MARK: Split detection / regions
 
     var isSplit: Bool {
-        switch splitMode {
-        case .splitRight: return pageIsWide   // force split, but only on an actually-wide page
-        case .single:     return false
-        case .auto:       return detectedSplit
-        }
+        isSplitActive(mode: splitMode,
+                      detection: SplitDetection(detectedSplit: detectedSplit, pageIsWide: pageIsWide))
     }
 
     var currentPage: PDFPage? { document?.page(at: currentIndex) }
@@ -104,11 +101,8 @@ final class PresentationModel {
     /// Return so the typed number is the document's page number, not the index.
     @discardableResult
     func goToLabel(_ text: String) -> Bool {
-        let target = text.trimmingCharacters(in: .whitespaces)
-        guard !target.isEmpty else { return false }
-        if let idx = (0..<pageCount).first(where: { label(for: $0) == target }) {
-            goTo(idx); return true
-        }
+        let labels = (0..<pageCount).map { label(for: $0) }
+        if let idx = resolveSlideLabel(text, in: labels) { goTo(idx); return true }
         return false
     }
 
@@ -140,13 +134,7 @@ final class PresentationModel {
         SlideRenderer.shared.clear()
         liveStroke = nil
         pointer = nil
-        if let p = doc.page(at: 0) {
-            let b = p.bounds(for: .cropBox)
-            let aspect = b.height > 0 ? b.width / b.height : 0
-            // Beamer "show notes on second screen" produces double-wide pages.
-            detectedSplit = aspect > 2.1   // auto-detect a notes deck
-            pageIsWide = aspect > 1.9      // wide enough to split at all (guards forced split)
-        }
+        applySplitDetection(doc)
         loadAnnotations()
         loadNotesSidecar()
     }
@@ -167,12 +155,7 @@ final class PresentationModel {
         SlideRenderer.shared.clear()
         liveStroke = nil
         pointer = nil
-        if let p = doc.page(at: 0) {
-            let b = p.bounds(for: .cropBox)
-            let aspect = b.height > 0 ? b.width / b.height : 0
-            detectedSplit = aspect > 2.1
-            pageIsWide = aspect > 1.9
-        }
+        applySplitDetection(doc)
         if let idx = (0..<pageCount).first(where: { label(for: $0) == oldLabel }) {
             currentIndex = idx
         } else {
@@ -182,18 +165,23 @@ final class PresentationModel {
         return true          // annotations (keyed by index) are kept as-is
     }
 
+    /// Classify the deck's first page for notes-splitting (shared by load/reload).
+    private func applySplitDetection(_ doc: PDFDocument) {
+        guard let p = doc.page(at: 0) else { detectedSplit = false; pageIsWide = false; return }
+        let b = p.bounds(for: .cropBox)
+        let d = detectSplit(cropBoxAspect: b.height > 0 ? b.width / b.height : 0)
+        detectedSplit = d.detectedSplit
+        pageIsWide = d.pageIsWide
+    }
+
     /// The slide half of a page, in 0-based cropBox-local points.
     func slideRegion(for page: PDFPage) -> CGRect {
-        let b = page.bounds(for: .cropBox)
-        if isSplit { return CGRect(x: 0, y: 0, width: b.width / 2, height: b.height) }
-        return CGRect(x: 0, y: 0, width: b.width, height: b.height)
+        PresenterKit.slideRegion(cropBox: page.bounds(for: .cropBox).size, split: isSplit)
     }
 
     /// The notes half of a page, or nil when not a split deck.
     func notesRegion(for page: PDFPage) -> CGRect? {
-        guard isSplit else { return nil }
-        let b = page.bounds(for: .cropBox)
-        return CGRect(x: b.width / 2, y: 0, width: b.width / 2, height: b.height)
+        PresenterKit.notesRegion(cropBox: page.bounds(for: .cropBox).size, split: isSplit)
     }
 
     // MARK: Navigation
@@ -310,37 +298,9 @@ final class PresentationModel {
         for ext in ["md", "markdown", "txt", "notes"] {
             let candidate = base.appendingPathExtension(ext)
             if let text = try? String(contentsOf: candidate, encoding: .utf8) {
-                notesSidecar = Self.parseNotes(text)
+                notesSidecar = parseSlideNotes(text)   // parser lives in PresenterKit (unit-tested)
                 break
             }
         }
-    }
-
-    /// Parses notes keyed by slide number. A line like `# 3`, `## 3`, or
-    /// `# Slide 3` starts the notes for that slide; following lines are its body.
-    static func parseNotes(_ text: String) -> [Int: String] {
-        var result: [Int: String] = [:]
-        var current: Int? = nil
-        var buffer: [String] = []
-        func flush() {
-            if let c = current {
-                result[c] = buffer.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            buffer = []
-        }
-        for line in text.components(separatedBy: .newlines) {
-            if let n = slideHeaderNumber(line) { flush(); current = n }
-            else { buffer.append(line) }
-        }
-        flush()
-        return result
-    }
-    private static func slideHeaderNumber(_ line: String) -> Int? {
-        let t = line.trimmingCharacters(in: .whitespaces)
-        guard t.hasPrefix("#") else { return nil }
-        var body = t.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces).lowercased()
-        if body.hasPrefix("slide") { body = String(body.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
-        let digits = body.prefix(while: { $0.isNumber })
-        return digits.isEmpty ? nil : Int(digits)
     }
 }
