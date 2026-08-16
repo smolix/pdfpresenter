@@ -38,11 +38,10 @@ struct LivePDFSlide: View {
     }
 
     private var zoomScale: CGFloat {
-        model.magnify ? model.magnifyScale : 1.0
+        (model.magnify && model.pointer != nil) ? model.magnifyScale : 1.0
     }
     private func zoomAnchor(fit: CGRect, in size: CGSize) -> UnitPoint {
-        let p = model.pointer ?? model.lastPointer
-        guard size.width > 0, size.height > 0 else { return .center }
+        guard let p = model.pointer, size.width > 0, size.height > 0 else { return .center }
         return UnitPoint(x: (fit.minX + p.x * fit.width) / size.width,
                          y: (fit.minY + p.y * fit.height) / size.height)
     }

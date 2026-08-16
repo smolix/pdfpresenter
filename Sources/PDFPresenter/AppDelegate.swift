@@ -361,7 +361,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func handleScrollWheel(_ e: NSEvent) -> Bool {
-        guard model.magnify else { return false }
+        guard model.magnify && model.pointer != nil else { return false }
         let delta = e.hasPreciseScrollingDeltas ? (e.scrollingDeltaY * 0.01) : (e.deltaY * 0.1)
         guard abs(delta) > 0.001 else { return false }
         model.adjustMagnifyScale(by: delta)
@@ -369,7 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func handleMagnifyGesture(_ e: NSEvent) -> Bool {
-        guard model.magnify else { return false }
+        guard model.magnify && model.pointer != nil else { return false }
         guard abs(e.magnification) > 0.001 else { return false }
         model.adjustMagnifyScale(by: e.magnification)
         return true

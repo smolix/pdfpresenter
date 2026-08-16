@@ -33,12 +33,7 @@ final class PresentationModel {
     // MARK: Tools / annotations
     var tool: Tool = .off
     var penColorIndex = 0
-    var pointer: CGPoint? = nil {            // normalized cursor over the current slide
-        didSet {
-            if let p = pointer { lastPointer = p }
-        }
-    }
-    var lastPointer: CGPoint = CGPoint(x: 0.5, y: 0.5)
+    var pointer: CGPoint? = nil            // normalized cursor over the current slide
     var magnify = false                    // zoom-into-pointer toggle
     var magnifyScale: CGFloat = 2.0 {      // zoom ratio for magnifier (1.25x ... 5.0x)
         didSet {

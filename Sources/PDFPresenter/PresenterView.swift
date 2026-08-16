@@ -141,9 +141,9 @@ struct SlideCard: View {
 
     @ViewBuilder private func content(size: CGSize) -> some View {
         if let img = renderedImage(pixelWidth: size.width * 2) {
-            let zoom: CGFloat = (model.magnify && kind == .slide && index == model.currentIndex) ? model.magnifyScale : 1.0
-            let p = model.pointer ?? model.lastPointer
-            let anchor = UnitPoint(x: p.x, y: p.y)
+            let zoom: CGFloat = (model.magnify && model.pointer != nil
+                                 && kind == .slide && index == model.currentIndex) ? model.magnifyScale : 1.0
+            let anchor = model.pointer.map { UnitPoint(x: $0.x, y: $0.y) } ?? .center
             ZStack {
                 Color.black
                 ZStack {
