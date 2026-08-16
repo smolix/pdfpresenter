@@ -49,6 +49,9 @@ final class GeometryTests: XCTestCase {
         XCTAssertEqual(clamp(-0.2), 0.0)
         XCTAssertEqual(clamp(20, 0, 10), 10)
         XCTAssertEqual(clamp(5, 0, 10), 5)
+        XCTAssertEqual(clamp(0.8, 1.0, 5.0), 1.0)
+        XCTAssertEqual(clamp(3.5, 1.0, 5.0), 3.5)
+        XCTAssertEqual(clamp(6.0, 1.0, 5.0), 5.0)
     }
 
     func testElapsedString() {

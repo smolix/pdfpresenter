@@ -143,6 +143,7 @@ artifacts live outside the source tree; nothing to clean up in the repo.
 | `X` | Eraser |
 | `S` | Spotlight (dim everything but a circle) |
 | `Z` | Magnifier (zoom into the cursor) |
+| `+` / `-` | Increase / decrease magnifier zoom scale (or use scroll wheel / trackpad pinch) |
 | `C` | Clear annotations on this slide |
 | `P` / `R` | Pause-resume / reset timer |
 | `E` | Cycle layout preset |
