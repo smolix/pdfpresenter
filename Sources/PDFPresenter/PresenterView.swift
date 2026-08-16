@@ -141,9 +141,9 @@ struct SlideCard: View {
 
     @ViewBuilder private func content(size: CGSize) -> some View {
         if let img = renderedImage(pixelWidth: size.width * 2) {
-            let zoom: CGFloat = (model.magnify && model.pointer != nil
-                                 && kind == .slide && index == model.currentIndex) ? 2.2 : 1.0
-            let anchor = model.pointer.map { UnitPoint(x: $0.x, y: $0.y) } ?? .center
+            let zoom: CGFloat = (model.magnify && kind == .slide && index == model.currentIndex) ? model.magnifyScale : 1.0
+            let p = model.pointer ?? model.lastPointer
+            let anchor = UnitPoint(x: p.x, y: p.y)
             ZStack {
                 Color.black
                 ZStack {
@@ -272,7 +272,8 @@ struct StatusBar: View {
                         .font(.callout).foregroundStyle(.orange)
                 }
                 if model.magnify {
-                    Label("Zoom", systemImage: "plus.magnifyingglass").font(.callout).foregroundStyle(.blue)
+                    Label(String(format: "Zoom (%.1f×)", model.magnifyScale), systemImage: "plus.magnifyingglass")
+                        .font(.callout).foregroundStyle(.blue)
                 }
 
                 Spacer()
@@ -385,7 +386,23 @@ struct TopBar: View {
             Button { model.magnify.toggle() } label: {
                 Image(systemName: model.magnify ? "plus.magnifyingglass" : "magnifyingglass")
             }
-            .foregroundStyle(model.magnify ? Color.accentColor : .primary).help("Magnifier (Z)")
+            .foregroundStyle(model.magnify ? Color.accentColor : .primary)
+            .help("Magnifier (Z) — scroll or ± to zoom")
+            .contextMenu {
+                Text("Magnifier Zoom")
+                ForEach([1.5, 2.0, 2.5, 3.0, 4.0] as [CGFloat], id: \.self) { scale in
+                    Button {
+                        model.setMagnifyScale(scale)
+                        model.magnify = true
+                    } label: {
+                        if abs(model.magnifyScale - scale) < 0.05 {
+                            Text("✓ \(String(format: "%.1f", scale))×")
+                        } else {
+                            Text("\(String(format: "%.1f", scale))×")
+                        }
+                    }
+                }
+            }
             Button { model.clearAnnotations() } label: { Image(systemName: "trash") }
                 .help("Clear annotations (C)")
 
@@ -408,6 +425,14 @@ struct TopBar: View {
                     Text("Auto-detect").tag(SplitMode.auto)
                     Text("Split (Beamer)").tag(SplitMode.splitRight)
                     Text("No notes").tag(SplitMode.single)
+                }
+                Picker("Magnifier zoom", selection: Binding(
+                    get: { model.magnifyScale },
+                    set: { model.setMagnifyScale($0) }
+                )) {
+                    ForEach([1.5, 2.0, 2.5, 3.0, 4.0] as [CGFloat], id: \.self) { s in
+                        Text(String(format: "%.1f×", s)).tag(s)
+                    }
                 }
                 Picker("Talk length", selection: $model.talkLength) {
                     Text("No target").tag(TimeInterval(0))

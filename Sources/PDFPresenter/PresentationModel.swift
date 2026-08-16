@@ -33,8 +33,18 @@ final class PresentationModel {
     // MARK: Tools / annotations
     var tool: Tool = .off
     var penColorIndex = 0
-    var pointer: CGPoint? = nil            // normalized cursor over the current slide
+    var pointer: CGPoint? = nil {            // normalized cursor over the current slide
+        didSet {
+            if let p = pointer { lastPointer = p }
+        }
+    }
+    var lastPointer: CGPoint = CGPoint(x: 0.5, y: 0.5)
     var magnify = false                    // zoom-into-pointer toggle
+    var magnifyScale: CGFloat = 2.0 {      // zoom ratio for magnifier (1.25x ... 5.0x)
+        didSet {
+            UserDefaults.standard.set(Double(magnifyScale), forKey: "magnifyScale")
+        }
+    }
     var strokes: [Int: [Stroke]] = [:]     // committed strokes, keyed by slide index
     var liveStroke: Stroke? = nil          // stroke currently being drawn
 
@@ -59,10 +69,28 @@ final class PresentationModel {
            let p = LayoutPreset(rawValue: s) { preset = p }
         let t = UserDefaults.standard.double(forKey: "talkLength")
         if t > 0 { talkLength = t }
+        let m = UserDefaults.standard.double(forKey: "magnifyScale")
+        if m >= 1.0 && m <= 5.0 { magnifyScale = CGFloat(m) }
     }
     func cyclePreset() {
         let all = LayoutPreset.allCases
         if let i = all.firstIndex(of: preset) { preset = all[(i + 1) % all.count] }
+    }
+
+    func setMagnifyScale(_ scale: CGFloat) {
+        magnifyScale = clamp(scale, 1.0, 5.0)
+    }
+
+    func adjustMagnifyScale(by delta: CGFloat) {
+        setMagnifyScale(magnifyScale + delta)
+    }
+
+    func zoomIn() {
+        adjustMagnifyScale(by: 0.25)
+    }
+
+    func zoomOut() {
+        adjustMagnifyScale(by: -0.25)
     }
 
     // MARK: Split detection / regions

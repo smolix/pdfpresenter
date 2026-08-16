@@ -36,6 +36,7 @@ struct HelpOverlay: View {
             Shortcut(keys: "X", label: "Eraser"),
             Shortcut(keys: "S", label: "Spotlight"),
             Shortcut(keys: "Z", label: "Magnifier (zoom to cursor)"),
+            Shortcut(keys: "+ / -", label: "Tune magnifier zoom (or scroll/pinch)"),
             Shortcut(keys: "C", label: "Clear this slide's annotations"),
         ]),
         Section(title: "Screen & display", items: [

@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var audienceWindow: NSWindow!         // decorated, movable, minimizable
     private var coverWindow: SlideWindow!         // dedicated borderless cover; never restyled live
     private var keyMonitor: Any?
+    private var scrollMonitor: Any?
+    private var magnifyMonitor: Any?
     private var audiencePresenting = false        // is the cover window currently shown?
     private var gotoBuffer = ""
     private var pendingURL: URL?
@@ -61,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // The user presents when ready (F / green zoom / Present menu).
         audiencePresenting = false
         arrangeWindows()
-        installKeyMonitor()
+        installEventMonitors()
         startRemoteServer()
         NotificationCenter.default.addObserver(
             self, selector: #selector(screensChanged),
@@ -341,13 +343,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         sender.state = docWatcher.isEnabled ? .on : .off
     }
 
-    // MARK: Keyboard
+    // MARK: Event monitors
 
-    private func installKeyMonitor() {
+    private func installEventMonitors() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             return self.handleKey(event) ? nil : event
         }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self else { return event }
+            return self.handleScrollWheel(event) ? nil : event
+        }
+        magnifyMonitor = NSEvent.addLocalMonitorForEvents(matching: .magnify) { [weak self] event in
+            guard let self else { return event }
+            return self.handleMagnifyGesture(event) ? nil : event
+        }
+    }
+
+    private func handleScrollWheel(_ e: NSEvent) -> Bool {
+        guard model.magnify else { return false }
+        let delta = e.hasPreciseScrollingDeltas ? (e.scrollingDeltaY * 0.01) : (e.deltaY * 0.1)
+        guard abs(delta) > 0.001 else { return false }
+        model.adjustMagnifyScale(by: delta)
+        return true
+    }
+
+    private func handleMagnifyGesture(_ e: NSEvent) -> Bool {
+        guard model.magnify else { return false }
+        guard abs(e.magnification) > 0.001 else { return false }
+        model.adjustMagnifyScale(by: e.magnification)
+        return true
     }
 
     private func advance() { model.startTimerIfNeeded(); model.goNext() }
@@ -397,6 +422,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         switch ch {
+        case "+", "=":
+            if model.magnify { model.zoomIn(); return true }
+        case "-", "_":
+            if model.magnify { model.zoomOut(); return true }
         case "b": model.toggleBlack(); return true
         case "w": model.toggleWhite(); return true
         case "f": toggleAudienceFullscreen(); return true
@@ -491,6 +520,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         notesSplit.target = self; viewMenu.addItem(notesSplit)
         let notesNone = NSMenuItem(title: "Notes: None", action: #selector(setSplitOff(_:)), keyEquivalent: "")
         notesNone.target = self; viewMenu.addItem(notesNone)
+        viewMenu.addItem(.separator())
+        let magMenu = NSMenu(title: "Magnifier Zoom")
+        let magItem = NSMenuItem(title: "Magnifier Zoom", action: nil, keyEquivalent: "")
+        magItem.submenu = magMenu
+        for s in [1.5, 2.0, 2.5, 3.0, 4.0] {
+            let it = NSMenuItem(title: "\(String(format: "%.1f", s))×", action: #selector(setMagnifyScaleAction(_:)), keyEquivalent: "")
+            it.target = self
+            it.representedObject = s
+            magMenu.addItem(it)
+        }
+        magMenu.addItem(.separator())
+        let zoomInItem = NSMenuItem(title: "Zoom In", action: #selector(zoomInAction(_:)), keyEquivalent: "=")
+        zoomInItem.target = self
+        magMenu.addItem(zoomInItem)
+        let zoomOutItem = NSMenuItem(title: "Zoom Out", action: #selector(zoomOutAction(_:)), keyEquivalent: "-")
+        zoomOutItem.target = self
+        magMenu.addItem(zoomOutItem)
+        viewMenu.addItem(magItem)
         viewMenu.addItem(.separator())
         let overview = NSMenuItem(title: "Slide Overview", action: #selector(toggleOverview(_:)), keyEquivalent: "g")
         overview.keyEquivalentModifierMask = [.command]; overview.target = self
@@ -655,7 +702,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func setSplitAuto(_ s: Any?) { model.splitMode = .auto }
     @objc private func setSplitOn(_ s: Any?)   { model.splitMode = .splitRight }
     @objc private func setSplitOff(_ s: Any?)  { model.splitMode = .single }
+    @objc private func setMagnifyScaleAction(_ sender: NSMenuItem) {
+        if let s = sender.representedObject as? Double {
+            model.setMagnifyScale(CGFloat(s))
+            model.magnify = true
+        }
+    }
+    @objc private func zoomInAction(_ s: Any?) {
+        model.zoomIn()
+        model.magnify = true
+    }
+    @objc private func zoomOutAction(_ s: Any?) {
+        model.zoomOut()
+        model.magnify = true
+    }
     @objc private func toggleOverview(_ s: Any?) { model.showOverview.toggle() }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(setMagnifyScaleAction(_:)) {
+            if let s = menuItem.representedObject as? Double {
+                menuItem.state = abs(Double(model.magnifyScale) - s) < 0.05 ? .on : .off
+            }
+            return true
+        }
+        return true
+    }
     @objc private func fullscreenAction(_ s: Any?) { toggleAudienceFullscreen() }
     @objc private func cycleAudienceAction(_ s: Any?) { cycleAudienceDisplay() }
     @objc private func chooseAudienceAuto(_ s: Any?) { audienceScreenChoice = nil; arrangeWindows() }

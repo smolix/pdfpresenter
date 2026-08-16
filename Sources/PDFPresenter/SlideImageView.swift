@@ -48,10 +48,11 @@ struct SlideImageView: View {
     }
 
     private var zoomScale: CGFloat {
-        (model.magnify && model.pointer != nil && index == model.currentIndex) ? 2.2 : 1.0
+        (model.magnify && index == model.currentIndex) ? model.magnifyScale : 1.0
     }
     private func zoomAnchor(fit: CGRect, in size: CGSize) -> UnitPoint {
-        guard let p = model.pointer, size.width > 0, size.height > 0 else { return .center }
+        let p = model.pointer ?? model.lastPointer
+        guard size.width > 0, size.height > 0 else { return .center }
         return UnitPoint(x: (fit.minX + p.x * fit.width) / size.width,
                          y: (fit.minY + p.y * fit.height) / size.height)
     }
